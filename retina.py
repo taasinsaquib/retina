@@ -9,12 +9,16 @@ import pickle
 
 import open3d as o3d
 
+# ************
+# ToDo: KDTree
+# ************
+
 # create noisy log polar offsets from center point
 def generateRetinaDistribution(radius, alpha=360, rho=41, save=''):
 
     noiseOffsets = []
 
-    mean = 0
+    mean = 0   
     var = 0.0025
     stdDev = math.sqrt(var)
 
