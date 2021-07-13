@@ -36,13 +36,20 @@ pcd = pcd.select_by_index(pt_map)
 tree = o3d.geometry.KDTreeFlann()
 tree.set_geometry(mesh_sphere)
 
+# help(o3d.geometry.KDTreeFlann)
+
 print("Paint the 1500th point red.")
 pcd.colors[1500] = [0, 1, 0]
 
 print(pcd.points[1500])
 
 # print("Find its 200 nearest neighbors, and paint them blue.")
-[k, idx, _] = tree.search_radius_vector_3d([0, 0, 0], 100)
+[k, idx, hi] = tree.search_radius_vector_3d([0, 0, 0], 100)
+
+print(k)
+print(idx)
+print(hi)
+
 np.asarray(pcd.colors)[idx[1:], :] = [1, 0, 0]
 
-o3d.visualization.draw_geometries([pcd])
+# o3d.visualization.draw_geometries([pcd])
