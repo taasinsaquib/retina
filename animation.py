@@ -88,10 +88,14 @@ def rotate_view(vis):
 # Two windows at once
 
 np.set_printoptions(threshold=sys.maxsize)
-# np.set_printoptions(threshold = False) 
+# np.set_printoptions(threshold = False)
+
+w = 200
+h = 200
+c = 3
 
 scene = o3d.visualization.Visualizer()
-scene.create_window(window_name='Main Scene', width=200, height=200, left=200, top=500, visible=True)
+scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
 scene.add_geometry(mesh_sphere)
 
 # lastImage = o3d.geometry.Image()
@@ -99,7 +103,7 @@ lastImage = None
 curDisplay = o3d.geometry.Image()
 
 eyeVis = o3d.visualization.Visualizer()
-eyeVis.create_window(window_name='Left Eye', width=200, height=200, left=200, top=700, visible=True)
+eyeVis.create_window(window_name='Left Eye', width=w, height=h, left=200, top=700, visible=True)
 eyeVis.add_geometry(curDisplay)
 
 # print(type(mesh_sphere), type(curDisplay))
@@ -109,29 +113,33 @@ eyeVis.add_geometry(curDisplay)
 for i in range(0, 10):
     mesh_sphere.translate((0.01, 0, 0))
 
+    # experiment with rotation
+    # R = mesh_sphere.get_rotation_matrix_from_xyz((np.pi / 2, 0, np.pi / 4))
+    # mesh_sphere.rotate(R, center=(0, 0, 0))
+
     scene.update_geometry(mesh_sphere)
     scene.poll_events()
     scene.update_renderer()
     
     curImage = scene.capture_screen_float_buffer(do_render=True)
-
-    # test = np.asarray(curImage)
-    # print(np.sum(test != 1.))
-    # plt.imshow(test)
     
     # scene.capture_screen_image(f'/Users/Saquib/Desktop/{i}.png', do_render=True)
 
     # display the difference between the frames
     if lastImage != None:
-        events = np.asarray(curImage) - np.asarray(lastImage)
-        
+        events = np.asarray(curImage, dtype=np.int8) - np.asarray(lastImage, dtype=np.int8)
+
         print(np.count_nonzero(events < 0), np.count_nonzero(events > 0), np.count_nonzero(events))
+
+        # for visualization purposes
+        events[events>0] = 255
+
         curDisplay = o3d.geometry.Image(events)
+        o3d.io.write_image(f'/Users/Saquib/Desktop/{i}.png', curDisplay)
 
         eyeVis.update_geometry(curDisplay)
         eyeVis.poll_events()
         eyeVis.update_renderer()
-        # o3d.io.write_image(f'/Users/Saquib/Desktop/{i}.png', curImage)
 
     lastImage = curImage
 
