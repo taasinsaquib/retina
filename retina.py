@@ -43,7 +43,7 @@ def generateRetinaDistribution(radius, alpha=360, rho=41, save=''):
     noiseOffsets = np.array(noiseOffsets)
 
     if save != '':
-        with open('retina_dist.npy', 'wb') as f:
+        with open(f'{save}.npy', 'wb') as f:
             np.save(f, noiseOffsets)
 
     return noiseOffsets
@@ -51,6 +51,25 @@ def generateRetinaDistribution(radius, alpha=360, rho=41, save=''):
 
 def loadRetinaDistribution(f):
     return np.load(f)
+
+
+def calculateRayDirections(distribution, center):
+
+    pass
+
+    n = distribution.shape[0] - 1
+
+    directions = np.empty((n, 3))
+
+    for i in range(0, n):
+
+        d = center - distribution[i]
+        d = d / np.linalg.norm(d)
+
+        directions[i] = d
+
+    return directions
+
 
 def visualizeRetina(center, pinhole, offsets, alpha=360, rho=41):
 
@@ -105,7 +124,7 @@ cube_id = scene.add_triangles(cube)
 print(cube_id)
 """
 
-# """
+"""
 print("Let's define some primitives")
 mesh_box = o3d.geometry.TriangleMesh.create_box(width=1.0,
                                                 height=1.0,
@@ -143,13 +162,13 @@ print("We draw a few primitives using collection.")
 # o3d.visualization.draw_geometries([mesh_sphere, leftEye, mesh_frame])
 center = np.array([0, 0, 3])
 
-line_set = visualizeRetina(center, leftEyeConverge, generateRetinaDistribution(eyeRadius))
+line_set = visualizeRetina(center, leftEyeConverge, generateRetinaDistribution(eyeRadius, save=''))
 o3d.visualization.draw_geometries([leftEye, line_set, mesh_box])
 
 # print("We draw a few primitives using + operator of mesh.")
 # o3d.visualization.draw_geometries(
 #     [mesh_box + mesh_sphere + mesh_cylinder + mesh_frame])
-# """
+"""
 
 """
 print("Let's draw a box using o3d.geometry.LineSet.")
