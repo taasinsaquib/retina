@@ -20,15 +20,15 @@ mesh_sphere.paint_uniform_color([0.1, 0.1, 0.7])
 
 print("HIIIIIII")
 colors = mesh_sphere.vertex_colors
-for c in colors:
-    print(c)
+# for c in colors:
+#     print(c)
 # print(dir(cube.triangles))
 # items = cube.triangles.items()
 # for i in items:
     # print(i)
 
 ts = np.asarray(cube.triangles)
-# print(ts)
+print(ts)
 
 # Create a scene and add the triangle mesh
 scene = o3d.t.geometry.RaycastingScene()
