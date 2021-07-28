@@ -184,7 +184,13 @@ eyeVis.destroy_window()
 """
 
 # for horizontal motion
-def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
+def generateTrainingDataH(eyeCenter, delta, w=200, h=200, c=3):
+
+    """
+        pol (int) -1 or 1, if the sphere moves right to left or L or R
+        eyeCenter ([float, float, float]) position of the center of the eye
+        delta (float) how much the sphere moves in one step
+    """
 
     # lineset to see boundaries of viewing frustum
     """
@@ -205,6 +211,12 @@ def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
         lines=o3d.utility.Vector2iVector(lines),
     )
     """
+
+    pol = 1
+    dir = 'R'
+    if delta < 0:
+        pol = -1
+        dir = 'L'
 
     # create sphere
     mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
@@ -231,19 +243,20 @@ def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
 
     # figure out how many steps to take based on dx
     distX = 1.5 - (-1.5) + 2 * 0.25      # maxX - minX + 2 * radius of sphere + little extra
-    nStepsX = distX / delta + 2 * 0.5
+    nStepsX = math.ceil(distX / delta * pol) # ceil to make sure x is always reset correctly after the inner loop runs
 
-    distY = 1.5 - (-1.5) + 2 * 0.25 + 0.2     # maxX - minX + 2 * radius of sphere + little extra
-    nStepsY = distY / delta
+    # keep y movement constant to get screen coverage
+    nStepsY = 36
 
-    mesh_sphere.translate((-delta*nStepsX/2, -delta*nStepsY/2, 0))
+    mesh_sphere.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
 
     print(nStepsY, nStepsX)
 
-    for i in range(0, int(nStepsY)):
-        mesh_sphere.translate((0, delta, 0))
+    nZeros = 0
 
+    for i in range(0, int(nStepsY)):
         for j in range(0, int(nStepsX)):
+
             mesh_sphere.translate((delta, 0, 0))
             # print(mesh_sphere.get_center())
 
@@ -273,6 +286,7 @@ def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
                 [sX, sY, _] = mesh_sphere.get_center()
                 if (abs(sX) > 1.5 + 0.25) or (abs(sY) > 1.5 + 0.25):    # deltaGaze zero'd out if sphere not in view
                     deltaGaze = [0, 0, 0]
+                    nZeros += 1
                 else:
                     deltaGaze = mesh_sphere.get_center() - eyeCenter
 
@@ -288,7 +302,7 @@ def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
                 # convert to b/w for binary events
                 # bw = np.dot(events[...,:3], [0.299, 0.587, 0.114])
 
-                curDisplay = o3d.geometry.Image(events)
+                curDisplay = o3d .geometry.Image(events)
                 # o3d.io.write_image(f'/Users/Saquib/Desktop/{j}.png', curDisplay)
 
                 # eyeVis.update_geometry(curDisplay)
@@ -296,14 +310,25 @@ def generateTrainingDataH(dataName, eyeCenter, delta, w=200, h=200, c=3):
                 # eyeVis.update_renderer()
 
             lastImage = curImage
-        
-        mesh_sphere.translate((-nStepsX * delta, 0, 0))
+
+        mesh_sphere.translate((-nStepsX * delta, 0.1, 0))
+
+    dataSet = np.array(dataSet)
+    labels  = np.array(labels)
 
     # save data
-    # np.save('data/data', dataSet)
-    # np.save('data/labels', labels)
+    np.save(f'data/data_{delta*pol}_{dir}', dataSet)
+    np.save(f'data/labels_{delta*pol}_{dir}', labels)
+
+    print(nZeros, dataSet.shape, labels.shape)
 
     scene.destroy_window()
 
+# rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1, 0.01]
+rates = [0.01]
+
 eyeCenter = [0, 0, 3]
-generateTrainingDataH("hi", eyeCenter, 0.1)
+
+for r in rates:
+    for i in [1, -1]:
+        generateTrainingDataH(eyeCenter, i*r)
