@@ -12,7 +12,7 @@ kiwisolver==1.3.1
 matplotlib==3.4.2
 matplotlib-inline==0.1.2
 numpy==1.21.0
-open3d==0.13.0
+open3d @ file:///Users/Saquib/Downloads/open3d-0.13.0%2Bb4e6d9e-cp38-cp38-macosx_10_14_x86_64.whl
 pandas==1.3.0
 parso==0.8.2
 pexpect==4.8.0
@@ -29,6 +29,9 @@ scikit-learn==0.24.2
 scipy==1.7.0
 six==1.16.0
 threadpoolctl==2.2.0
+torch==1.9.0
+torchvision==0.10.0
 tqdm==4.61.2
 traitlets==5.0.5
+typing-extensions==3.10.0.0
 wcwidth==0.2.5

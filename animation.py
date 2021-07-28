@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-import os
-import sys
-import copy
+import torch
+import torchvision
 import math
-import pickle
+
+from MyResnet import MyResNet
 
 import open3d as o3d
 
@@ -228,6 +228,7 @@ def generateTrainingDataH(eyeCenter, delta, w=200, h=200, c=3):
     scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
     scene.add_geometry(mesh_sphere)
     # scene.add_geometry(line_set)
+    scene.register_key_callback(ord('K'), change_background_to_black)
 
     sceneControl = scene.get_view_control()
     # print(sceneControl.get_field_of_view())
@@ -257,7 +258,7 @@ def generateTrainingDataH(eyeCenter, delta, w=200, h=200, c=3):
     for i in range(0, int(nStepsY)):
         for j in range(0, int(nStepsX)):
 
-            mesh_sphere.translate((delta, 0, 0))
+            # mesh_sphere.translate((delta, 0, 0))
             # print(mesh_sphere.get_center())
 
             scene.update_geometry(mesh_sphere)
@@ -311,24 +312,108 @@ def generateTrainingDataH(eyeCenter, delta, w=200, h=200, c=3):
 
             lastImage = curImage
 
-        mesh_sphere.translate((-nStepsX * delta, 0.1, 0))
+        # mesh_sphere.translate((-nStepsX * delta, 0.1, 0))
 
     dataSet = np.array(dataSet)
     labels  = np.array(labels)
 
     # save data
-    np.save(f'data/data_{delta*pol}_{dir}', dataSet)
-    np.save(f'data/labels_{delta*pol}_{dir}', labels)
+    # np.save(f'data/data_{delta*pol}_{dir}', dataSet)
+    # np.save(f'data/labels_{delta*pol}_{dir}', labels)
 
     print(nZeros, dataSet.shape, labels.shape)
 
     scene.destroy_window()
 
 # rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1, 0.01]
-rates = [0.01]
+# rates = [0.1]
 
 eyeCenter = [0, 0, 3]
 
-for r in rates:
-    for i in [1, -1]:
-        generateTrainingDataH(eyeCenter, i*r)
+# for r in rates:
+#     for i in [1, -1]:
+#         generateTrainingDataH(eyeCenter, i*r)
+
+
+# Code to Run a NN and infer where the sphere center is
+
+def moveLeft(vis):
+    mesh_sphere.translate((-0.1, 0, 0))
+
+def moveRight(vis):
+    mesh_sphere.translate((0.1, 0, 0))
+
+def moveUp(vis):
+    mesh_sphere.translate((0, 0.1, 0))
+
+def moveDown(vis):
+    mesh_sphere.translate((0, -0.1, 0))
+
+# create sphere
+mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
+mesh_sphere.compute_vertex_normals()
+mesh_sphere.paint_uniform_color([0.1, 0.1, 0.7])
+
+run = True
+
+def sceneWithNN(eyeCenter, model, w=200, h=200, c=3):
+
+    scene = o3d.visualization.VisualizerWithKeyCallback()
+    scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
+    scene.add_geometry(mesh_sphere)
+    # scene.add_geometry(line_set)
+
+    sceneControl = scene.get_view_control()
+    sceneControl.set_zoom(1.5)
+
+    # can't hold two together, just works the first time then picks one direction to continue in
+    scene.register_key_callback(ord('A'), moveLeft)
+    scene.register_key_callback(ord('D'), moveRight)
+    scene.register_key_callback(ord('W'), moveUp)
+    scene.register_key_callback(ord('S'), moveDown)
+
+    lastImage = None
+
+    while run == True:      # currently no way of stopping it, just hit ctrl-C
+        scene.update_geometry(mesh_sphere)
+        scene.poll_events()
+        scene.update_renderer()
+
+        curImage = scene.capture_screen_float_buffer(do_render=True)
+
+        # display the difference between the frames
+        if lastImage != None:
+
+            events = np.asarray(curImage, dtype=np.int8) - np.asarray(lastImage, dtype=np.int8)
+
+            # make binary events
+            binEvents = np.zeros((w, h))
+
+            bright = np.argwhere(events > 0)
+            dim    = np.argwhere(events < 0)
+
+            binEvents[bright[:, :2]] = 1
+            binEvents[dim[:, :2]]    = -1
+
+            # TODO: make binEvents 2 channel to input to NN
+
+            # label
+            [sX, sY, _] = mesh_sphere.get_center()
+            if (abs(sX) > 1.5 + 0.25) or (abs(sY) > 1.5 + 0.25):    # deltaGaze zero'd out if sphere not in view
+                deltaGaze = [0, 0, 0]
+            else:
+                deltaGaze = mesh_sphere.get_center() - eyeCenter
+
+            # TODO: run NN here
+            # output = model(binEvents)
+
+            # TODO: red dot where it thinks the center is using output
+
+        lastImage = curImage
+
+    scene.destroy_window()
+
+model = torch.load('./models/resnet_improvement_v3', map_location=torch.device('cpu'))
+model.eval()
+
+sceneWithNN(eyeCenter, model)
