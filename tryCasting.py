@@ -28,6 +28,16 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
     searchRay = [True] * nRays
     onv = np.ones((nRays, 3))
 
+    # try octtree
+    octree = o3d.geometry.Octree(max_depth=4)
+    octree.convert_from_point_cloud(pcd, size_expand=0.01)
+
+    print(octree.get_max_bound())
+    print(octree.get_min_bound())
+
+    print(octree.size)
+    print(octree.origin)
+
     # code to visualize rays with a LineSet
     if seeLines:
         points = np.zeros((2*nRays, 3))
@@ -50,8 +60,10 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
     for t in np.arange(0, 10, 0.1):
         # not sure if this updates the tree (probs not?) figure out how to move, probs another nested for outside of this one
         # pcd.translate([0.1, 0, 0])
+        pcdPoints = np.asanyarray(pcd.points)
 
         # Add current point cloud to Tree (not sure if we can just translate the pcd in the tree or something to avoid re-creating the tree in case the sphere moves)
+        # creating it with 10k points is slow per frame
         tree = o3d.geometry.KDTreeFlann()
         tree.set_geometry(pcd)
 
@@ -76,7 +88,7 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
             k, idx, _ = tree.search_hybrid_vector_3d(cur, 0.05, 1)
 
             if k > 0:
-                print("hit ", t, k, idx, colors[idx[1:], :])
+                # print("hit ", t, k, idx, colors[idx[1:], :])
 
                 curColor = colors[idx[1:], :]
 
@@ -89,8 +101,32 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
                 hits[i] = t
                 searchRay[i] = False
 
-                if seeLines:
-                    colors[idx[:1], :] = [1, 0, 0]
+                # if seeLines:
+                    # colors[idx[:1], :] = [1, 0, 0]
+
+            # octtree
+            leaf, info = octree.locate_leaf_node(cur)
+            # print(leaf, info)
+            if leaf is not None:
+                # print("HIT", octree.is_point_in_bound(cur, octree.origin, octree.size), cur, leaf.color, leaf.indices)
+                print("HIT", i, t)
+                candidates = pcdPoints[leaf.indices]
+
+                dist = np.linalg.norm(candidates - cur, axis=1)
+
+                if np.count_nonzero(dist < 0.1) > 0:
+
+                    hits[i] = t
+                    searchRay[i] = False
+
+                    closeIdx = np.argmin(dist)
+                    # print(cur)
+                    # print(candidates)
+                    # print(dist)
+                    print(closeIdx)
+                
+                    colors[leaf.indices[closeIdx], :] = [0, 1, 0]
+                    
 
         # update graphics loop
         scene.update_geometry(pcd)
@@ -139,30 +175,30 @@ def main():
 
     pupil = np.array([0, 0, 0.5])
 
-    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil)
+    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil, False)
 
     # see hits on retina distribution
 
     print("See HITS")
 
     print("# rays that missed: ", np.count_nonzero(searchRay))
-
+    """
     # visualize hit distance
     hits += np.min(hits)
     hits /= np.max(hits)
 
-    print(np.min(hits))
-
+    # just visualize if there was a hit or not
     color = np.zeros(len(hits))
-
     for i, s in enumerate(searchRay):
         if s == False:
             color[i] = 1
 
-    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
+    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=color)
+    # plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
     plt.xlim([-0.35, 0.35])
     plt.ylim([-0.35, 0.35])
     plt.show()
+    """
 
 if __name__=="__main__":
     main()
