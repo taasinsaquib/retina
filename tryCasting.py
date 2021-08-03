@@ -2,8 +2,9 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 
-def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200):
-    
+
+def setupScene(seeLines, nPoints, w, h, rays, nRays):
+
     # create sphere
     sphereColor = [0.1, 0.1, 0.7]
     mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
@@ -22,21 +23,7 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
     sceneControl = scene.get_view_control()
     sceneControl.set_zoom(1.5)
 
-    # data structs to hold info
-    nRays = len(rays)
-    hits =  [0] * nRays
-    searchRay = [True] * nRays
-    onv = np.ones((nRays, 3))
-
-    # try octtree
-    octree = o3d.geometry.Octree(max_depth=4)
-    octree.convert_from_point_cloud(pcd, size_expand=0.01)
-
-    print(octree.get_max_bound())
-    print(octree.get_min_bound())
-
-    print(octree.size)
-    print(octree.origin)
+    line_set = None
 
     # code to visualize rays with a LineSet
     if seeLines:
@@ -57,16 +44,57 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
 
         scene.add_geometry(line_set)
 
+    return pcd, scene, line_set
+
+
+def octreeSearch(cur, octree, pcdPoints, seeHits):
+    
+    found = False
+    idx = -1
+
+    leaf, _ = octree.locate_leaf_node(cur)
+
+    if leaf is not None:
+        # print("HIT", octree.is_point_in_bound(cur, octree.origin, octree.size), cur, leaf.color, leaf.indices)
+        
+        # get L2 distance from current point to points in the leaf node
+        candidates = pcdPoints[leaf.indices]
+        dist = np.linalg.norm(candidates - cur, axis=1)
+
+        # if any point is within 0.1, choose the closest point as the hit
+        if np.count_nonzero(dist < 0.1) > 0:
+            
+            found = True
+
+            # mark closest point as green
+            if seeHits:
+                closeIdx = np.argmin(dist)
+                idx = leaf.indices[closeIdx]
+                # colors[leaf.indices[closeIdx], :] = [0, 1, 0]
+
+    return found, idx
+
+
+def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, nPoints=10000, w=200, h=200):
+
+    nRays = len(rays)
+
+    pcd, scene, line_set = setupScene(seeLines, nPoints, w, h, rays, nRays)
+
+    # setup data structs to hold info
+    hits =  [0] * nRays                     # hit distances of rays, 0 if no intersection
+    searchRay = [True] * nRays              # store if corresponding ray index has hit yet
+    onv = np.zeros((nRays, 3))               # store colors of the ray hits, black (0, 0, 0) if not hit 
+
+    # create octree
+    octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
+    octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
+
     for t in np.arange(0, 10, 0.1):
-        # not sure if this updates the tree (probs not?) figure out how to move, probs another nested for outside of this one
+
+        # TODO: translate octree as well
         # pcd.translate([0.1, 0, 0])
         pcdPoints = np.asanyarray(pcd.points)
-
-        # Add current point cloud to Tree (not sure if we can just translate the pcd in the tree or something to avoid re-creating the tree in case the sphere moves)
-        # creating it with 10k points is slow per frame
-        tree = o3d.geometry.KDTreeFlann()
-        tree.set_geometry(pcd)
-
         colors = np.asarray(pcd.colors)
 
         # extend the rays
@@ -81,52 +109,15 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
                 line_set.points[2*i+1] = curPoints[i]
 
         for i in indices.flatten():
-
             cur = curPoints[i]
+            hit, closeIdx = octreeSearch(cur, octree, pcdPoints, seeHits)
 
-            # can't traverse tree directly so I'm using this method
-            k, idx, _ = tree.search_hybrid_vector_3d(cur, 0.05, 1)
-
-            if k > 0:
-                # print("hit ", t, k, idx, colors[idx[1:], :])
-
-                curColor = colors[idx[1:], :]
-
-                # because of poisson sample, rays go through gaps?
-                if len(curColor) == 0:
-                    onv[i] = sphereColor
-                else:
-                    onv[i] = curColor
-                
+            if hit == True:
                 hits[i] = t
                 searchRay[i] = False
 
-                # if seeLines:
-                    # colors[idx[:1], :] = [1, 0, 0]
-
-            # octtree
-            leaf, info = octree.locate_leaf_node(cur)
-            # print(leaf, info)
-            if leaf is not None:
-                # print("HIT", octree.is_point_in_bound(cur, octree.origin, octree.size), cur, leaf.color, leaf.indices)
-                print("HIT", i, t)
-                candidates = pcdPoints[leaf.indices]
-
-                dist = np.linalg.norm(candidates - cur, axis=1)
-
-                if np.count_nonzero(dist < 0.1) > 0:
-
-                    hits[i] = t
-                    searchRay[i] = False
-
-                    closeIdx = np.argmin(dist)
-                    # print(cur)
-                    # print(candidates)
-                    # print(dist)
-                    print(closeIdx)
-                
-                    colors[leaf.indices[closeIdx], :] = [0, 1, 0]
-                    
+                if seeHits:
+                    colors[closeIdx, :] = [0, 1, 0]
 
         # update graphics loop
         scene.update_geometry(pcd)
@@ -137,6 +128,7 @@ def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200)
         scene.update_renderer()
         # scene.run()
 
+    print("Done!")
     scene.run()
     scene.destroy_window()
 
@@ -175,14 +167,11 @@ def main():
 
     pupil = np.array([0, 0, 0.5])
 
-    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil, False)
-
-    # see hits on retina distribution
-
-    print("See HITS")
-
+    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False)
     print("# rays that missed: ", np.count_nonzero(searchRay))
-    """
+    
+    # see hits on retina distribution
+    # """
     # visualize hit distance
     hits += np.min(hits)
     hits /= np.max(hits)
@@ -193,12 +182,12 @@ def main():
         if s == False:
             color[i] = 1
 
-    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=color)
-    # plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
+    # plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=color)
+    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
     plt.xlim([-0.35, 0.35])
     plt.ylim([-0.35, 0.35])
     plt.show()
-    """
+    # """
 
 if __name__=="__main__":
     main()
