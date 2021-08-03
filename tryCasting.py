@@ -1,101 +1,168 @@
 import numpy as np
 import open3d as o3d
+import matplotlib.pyplot as plt
 
-w = 200
-h = 200
+def sphereRetinaRayCast(rays, pupil, seeLines=True, nPoints=10000, w=200, h=200):
+    
+    # create sphere
+    sphereColor = [0.1, 0.1, 0.7]
+    mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
+    mesh_sphere.compute_vertex_normals()
+    mesh_sphere.paint_uniform_color(sphereColor)
 
-# create sphere
-mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
-mesh_sphere.compute_vertex_normals()
-mesh_sphere.paint_uniform_color([0.1, 0.1, 0.7])
+    # point cloud (pcd) from mesh (to add to KDTree)
+    pcd = mesh_sphere.sample_points_poisson_disk(nPoints)
+    pcd.translate([0, 0, -3])
 
-pcd = mesh_sphere.sample_points_poisson_disk(10000)
+    # set up scene with pcd
+    scene = o3d.visualization.VisualizerWithKeyCallback()
+    scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
+    scene.add_geometry(pcd)
 
-# create scene, add sphere to it
-scene = o3d.visualization.VisualizerWithKeyCallback()
-scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
-scene.add_geometry(pcd)
+    sceneControl = scene.get_view_control()
+    sceneControl.set_zoom(1.5)
 
-sceneControl = scene.get_view_control()
-sceneControl.set_zoom(1.5)
+    # data structs to hold info
+    nRays = len(rays)
+    hits =  [0] * nRays
+    searchRay = [True] * nRays
+    onv = np.ones((nRays, 3))
 
-pcd.translate([0, 0, -3])
-
-rays = np.array([
-    [0, 0, 2],
-    [0.5, 0, 2],
-    [-0.5, 0, 2],
-])
-
-nRays = len(rays)
-
-pupil = np.array([0, 0, 1.5])
-
-# not sure if I should initialize to something else
-# 0 should be at the ray origin
-hits =  [0] * nRays
-
-# visualization stuff
-seeLines = True
-points = np.zeros((2*nRays, 3))
-lines = [[i, i+1] for i in range(0, nRays*2, 2)]
-colors = [[1, 0, 0] for i in range(len(lines))]
-
-for i in range(0, nRays):
-    points[i*2] = rays[i]
-
-# TODO: put this in the loop, update odd indices with current points
-line_set = o3d.geometry.LineSet(
-    points=o3d.utility.Vector3dVector(points),
-    lines=o3d.utility.Vector2iVector(lines),
-)
-line_set.colors = o3d.utility.Vector3dVector(colors)
-
-if seeLines:
-    scene.add_geometry(line_set)
-
-print(mesh_sphere.get_center())
-
-for t in np.arange(0, 10, 1):
-
-    # TODO: visualize rays
-
-    # not sure if this updates the tree (probs not?)
-    # pcd.translate([0.1, 0, 0])
-
-    tree = o3d.geometry.KDTreeFlann()
-    tree.set_geometry(pcd)
-
-    curPoints = rays * (1-t) + pupil * t
-
+    # code to visualize rays with a LineSet
     if seeLines:
+        points = np.zeros((2*nRays, 3))
+        lines = [[i, i+1] for i in range(0, nRays*2, 2)]
+        colors = [[1, 0, 0] for i in range(len(lines))]
+
+        # ray origin points at even indices, odd indices will be replaced with the current end of the ray
         for i in range(0, nRays):
-            line_set.points[2*i+1] = curPoints[i]
+            points[i*2] = rays[i]
 
-    # TODO: only search if there isn't a hit yet, or figure out a way to know there won't be a collision
-    for i in range(nRays):
-        cur = curPoints[i]
+        line_set = o3d.geometry.LineSet(
+            points=o3d.utility.Vector3dVector(points),
+            lines=o3d.utility.Vector2iVector(lines),
+        )
 
-        # using this, can't traverse tree with API
-        k, idx, _ = tree.search_hybrid_vector_3d(cur, 0.1, 1)
-        print(cur, k, idx)
-        
-        if k > 0 and hits[i] == 0:
-            np.asarray(pcd.colors)[idx[1:], :] = [1, 0, 0]
-            print("hit ", t)
-            hits[i] = t
+        line_set.colors = o3d.utility.Vector3dVector(colors)
 
-    scene.update_geometry(pcd)
-    if seeLines:
-        scene.update_geometry(line_set)
+        scene.add_geometry(line_set)
 
-    scene.poll_events()
-    scene.update_renderer()
+    for t in np.arange(0, 10, 0.1):
+        # not sure if this updates the tree (probs not?) figure out how to move, probs another nested for outside of this one
+        # pcd.translate([0.1, 0, 0])
+
+        # Add current point cloud to Tree (not sure if we can just translate the pcd in the tree or something to avoid re-creating the tree in case the sphere moves)
+        tree = o3d.geometry.KDTreeFlann()
+        tree.set_geometry(pcd)
+
+        colors = np.asarray(pcd.colors)
+
+        # extend the rays
+        curPoints = rays * (1-t) + pupil * t
+
+        # only search rays who haven't hit yet
+        indices = np.argwhere(searchRay)
+
+        # set odd indices of the points array, as mentioned above
+        if seeLines:
+            for i in indices.flatten():
+                line_set.points[2*i+1] = curPoints[i]
+
+        for i in indices.flatten():
+
+            cur = curPoints[i]
+
+            # can't traverse tree directly so I'm using this method
+            k, idx, _ = tree.search_hybrid_vector_3d(cur, 0.05, 1)
+
+            if k > 0:
+                print("hit ", t, k, idx, colors[idx[1:], :])
+
+                curColor = colors[idx[1:], :]
+
+                # because of poisson sample, rays go through gaps?
+                if len(curColor) == 0:
+                    onv[i] = sphereColor
+                else:
+                    onv[i] = curColor
+                
+                hits[i] = t
+                searchRay[i] = False
+
+                if seeLines:
+                    colors[idx[:1], :] = [1, 0, 0]
+
+        # update graphics loop
+        scene.update_geometry(pcd)
+        if seeLines:
+            scene.update_geometry(line_set)
+
+        scene.poll_events()
+        scene.update_renderer()
+        # scene.run()
 
     scene.run()
+    scene.destroy_window()
 
-print(hits)
+    return onv, hits, searchRay
 
-# scene.run()
+#*************************************************************#
+# main()
+#*************************************************************#
 
-scene.destroy_window()
+def main():
+
+    retina = np.load('./data/retina_dist.npy')
+    retina = retina[:14400]
+    retina[:, 2] += 1
+
+    rays = np.array([
+        [0, 0, 2],
+        [0.1, 0, 2],
+        [-0.1, 0, 2],
+        [0, 0.1, 2],
+        [0, -0.1, 2],
+        [0.3, 0, 2],
+        [-0.3, 0, 2],
+        [0, 0.5, 2],
+        [0, -0.5, 2],
+        [0.75, 0, 2],
+        [-0.75, 0, 2],
+        [0, 0.75, 2],
+        [0, -0.75, 2],
+    ])
+
+    problemRays = np.array([
+        [0, 0, 2],
+        [-0.05305311, 0.03463974,  2.]
+    ])
+
+    pupil = np.array([0, 0, 0.5])
+
+    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil)
+
+    # see hits on retina distribution
+
+    print("See HITS")
+
+    print("# rays that missed: ", np.count_nonzero(searchRay))
+
+    # visualize hit distance
+    hits += np.min(hits)
+    hits /= np.max(hits)
+
+    print(np.min(hits))
+
+    color = np.zeros(len(hits))
+
+    for i, s in enumerate(searchRay):
+        if s == False:
+            color[i] = 1
+
+    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
+    plt.xlim([-0.35, 0.35])
+    plt.ylim([-0.35, 0.35])
+    plt.show()
+
+if __name__=="__main__":
+    main()
