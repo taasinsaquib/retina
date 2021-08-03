@@ -1,8 +1,10 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
 from torch._C import device
 
+from animation import moveLeft, moveRight, moveUp, moveDown
 from MyResnet import MyResNet
 
 import open3d as o3d
@@ -23,18 +25,6 @@ def loadModel(path):
     model.eval()
 
     return model
-
-def moveLeft(vis):
-    mesh_sphere.translate((-0.1, 0, 0))
-
-def moveRight(vis):
-    mesh_sphere.translate((0.1, 0, 0))
-
-def moveUp(vis):
-    mesh_sphere.translate((0, 0.1, 0))
-
-def moveDown(vis):
-    mesh_sphere.translate((0, -0.1, 0))
 
 # create sphere
 mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
@@ -129,6 +119,7 @@ def sceneWithNN(eyeCenter, model=None, w=200, h=200, c=3):
 
             # label
             # TODO: re-train model with labels being distance traveled
+            # Jk aren't labels just however much the sphere moved?
                 # curCenter - lastCenter, not deltaGaze
             [sX, sY, _] = mesh_sphere.get_center()
             if (abs(sX) > 1.5 + 0.25) or (abs(sY) > 1.5 + 0.25):    # deltaGaze zero'd out if sphere not in view
@@ -153,14 +144,18 @@ def sceneWithNN(eyeCenter, model=None, w=200, h=200, c=3):
         lastImage  = curImage
         lastCenter = curCenter
 
-        mesh_sphere.translate((0.01, 0, 0))
+        mesh_sphere.translate((-0.1, 0, 0))
+        print("HI")
 
     scene.destroy_window()
     lineScene.destroy_window()
 
 # MAIN
 
-# model = loadModel('./models/resnet_improvement_v3_dict')
-# sceneWithNN(eyeCenter, model)
+model = loadModel('./models/resnet_dist_v1_dict')
 
-sceneWithNN(eyeCenter)
+
+
+sceneWithNN(eyeCenter, model)
+
+# sceneWithNN(eyeCenter)

@@ -37,12 +37,25 @@ cube_id = scene.add_triangles(cube)
 # We create two rays:
 # The first ray starts at (0.5,0.5,10) and has direction (0,0,-1).
 # The second ray start at (-1,-1,-1) and has direction (0,0,-1).
-rays = o3d.core.Tensor([[0.5, 0.5, 10, 0, 0, -1], [-1, -1, -1, 0, 0, -1]],
-                       dtype=o3d.core.Dtype.Float32)
+# rays = o3d.core.Tensor([[0.5, 0.5, 10, 0, 0, -1], [-1, -1, -1, 0, 0, -1]],
+                    #    dtype=o3d.core.Dtype.Float32)
 
-ans = scene.cast_rays(rays)
+# print(dir(scene))
 
-print(ans.keys())
-print(ans)
+# rays = o3d.t.geometry.RaycastingScene.create_rays_pinhole(
+#     fov_deg=90,
+#     center=[0, 0, 2],
+#     eye=[2, 3, 0],
+#     up=[0, 1, 0],
+#     width_px=640,
+#     height_px=480,
+# )
+
+# ans = scene.cast_rays(rays)
+
+# plt.imshow(ans['t_hit'].numpy(), vmax=3)
+
+# print(ans.keys())
+# print(ans)
 
 # help(o3d.t.geometry.RaycastingScene)
