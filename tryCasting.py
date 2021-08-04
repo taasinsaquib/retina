@@ -17,7 +17,7 @@ def setupScene(seeLines, nPoints, w, h, rays, nRays):
 
     # set up scene with pcd
     scene = o3d.visualization.VisualizerWithKeyCallback()
-    scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=500, visible=True)
+    scene.create_window(window_name='Main Scene', width=w, height=h, left=200, top=100, visible=True)
     scene.add_geometry(pcd)
 
     sceneControl = scene.get_view_control()
@@ -62,14 +62,12 @@ def octreeSearch(cur, octree, pcdPoints, seeHits):
 
         # if any point is within 0.1, choose the closest point as the hit
         if np.count_nonzero(dist < 0.1) > 0:
-            
             found = True
 
             # mark closest point as green
             if seeHits:
                 closeIdx = np.argmin(dist)
                 idx = leaf.indices[closeIdx]
-                # colors[leaf.indices[closeIdx], :] = [0, 1, 0]
 
     return found, idx
 
@@ -83,8 +81,6 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
 
     for t in np.arange(0, 10, 0.1):
 
-        # TODO: translate octree as well
-        # pcd.translate([0.1, 0, 0])
         pcdPoints = np.asanyarray(pcd.points)
         colors = np.asarray(pcd.colors)
 
@@ -117,17 +113,14 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
 
         scene.poll_events()
         scene.update_renderer()
-        # scene.run()
 
-    print("Done!")
-    scene.run()
-    scene.destroy_window()
+    print("Done")
+    # input("Done!, press Enter to continue...")
 
     return onv, hits, searchRay
 
-
+# plot ray hits and misses, or hit distances
 def visualizeHits(rays, hits, searchRay, distance=True):
-    # see hits on retina distribution
     
     # visualize hit distance
     hits += np.min(hits)
@@ -147,7 +140,7 @@ def visualizeHits(rays, hits, searchRay, distance=True):
     plt.xlim([-0.35, 0.35])
     plt.ylim([-0.35, 0.35])
     plt.show()
-    # """
+
 
 def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribution=False, nPoints=10000, w=200, h=200):
 
@@ -157,14 +150,21 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
 
     # create octree
     octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
-    octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
 
-    onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
+    for step in range(0, 2):
+        pcd.translate([0.1, 0, 0])
+        # octree.translate([0.1, 0, 0])     # Not implemented... so we have to keep clearing and adding in the geometry
 
-    print("# rays that missed: ", np.count_nonzero(searchRay))
+        octree.clear()
+        octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
+        onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
 
-    if seeDistribution:
-        visualizeHits(rays, hits, searchRay)
+        # print("# rays that missed: ", np.count_nonzero(searchRay))
+
+        if seeDistribution:
+            visualizeHits(rays, hits, searchRay)
+
+    scene.destroy_window()
 
 
 #*************************************************************#
@@ -193,15 +193,10 @@ def main():
         [0, -0.75, 2],
     ])
 
-    problemRays = np.array([
-        [0, 0, 2],
-        [-0.05305311, 0.03463974,  2.]
-    ])
-
     pupil = np.array([0, 0, 0.5])
 
-    # TODO: delta onv or hits 
-    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True)
+    # TODO: delta onv or hits, aka data collection pipeline
+    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True, w=600, h=600)
 
 
 if __name__=="__main__":
