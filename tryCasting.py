@@ -41,7 +41,6 @@ def setupScene(seeLines, nPoints, w, h, rays, nRays):
         )
 
         line_set.colors = o3d.utility.Vector3dVector(colors)
-
         scene.add_geometry(line_set)
 
     return pcd, scene, line_set
@@ -75,20 +74,12 @@ def octreeSearch(cur, octree, pcdPoints, seeHits):
     return found, idx
 
 
-def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, nPoints=10000, w=200, h=200):
-
-    nRays = len(rays)
-
-    pcd, scene, line_set = setupScene(seeLines, nPoints, w, h, rays, nRays)
-
+def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits):
+    
     # setup data structs to hold info
     hits =  [0] * nRays                     # hit distances of rays, 0 if no intersection
     searchRay = [True] * nRays              # store if corresponding ray index has hit yet
     onv = np.zeros((nRays, 3))               # store colors of the ray hits, black (0, 0, 0) if not hit 
-
-    # create octree
-    octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
-    octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
 
     for t in np.arange(0, 10, 0.1):
 
@@ -134,6 +125,48 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, nPoints=1000
 
     return onv, hits, searchRay
 
+
+def visualizeHits(rays, hits, searchRay, distance=True):
+    # see hits on retina distribution
+    
+    # visualize hit distance
+    hits += np.min(hits)
+    hits /= np.max(hits)
+
+    # just visualize if there was a hit or not
+    color = np.zeros(len(hits))
+    for i, s in enumerate(searchRay):
+        if s == False:
+            color[i] = 1
+
+    if distance:
+        plt.scatter(rays[:, 0:1], rays[:, 1:2], marker='.', c=hits)
+    else:
+        plt.scatter(rays[:, 0:1], rays[:, 1:2], marker='.', c=color)
+
+    plt.xlim([-0.35, 0.35])
+    plt.ylim([-0.35, 0.35])
+    plt.show()
+    # """
+
+def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribution=False, nPoints=10000, w=200, h=200):
+
+    nRays = len(rays)
+
+    pcd, scene, line_set = setupScene(seeLines, nPoints, w, h, rays, nRays)
+
+    # create octree
+    octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
+    octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
+
+    onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
+
+    print("# rays that missed: ", np.count_nonzero(searchRay))
+
+    if seeDistribution:
+        visualizeHits(rays, hits, searchRay)
+
+
 #*************************************************************#
 # main()
 #*************************************************************#
@@ -167,27 +200,9 @@ def main():
 
     pupil = np.array([0, 0, 0.5])
 
-    onv, hits, searchRay = sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False)
-    print("# rays that missed: ", np.count_nonzero(searchRay))
-    
-    # see hits on retina distribution
-    # """
-    # visualize hit distance
-    hits += np.min(hits)
-    hits /= np.max(hits)
+    # TODO: delta onv or hits 
+    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True)
 
-    # just visualize if there was a hit or not
-    color = np.zeros(len(hits))
-    for i, s in enumerate(searchRay):
-        if s == False:
-            color[i] = 1
-
-    # plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=color)
-    plt.scatter(retina[:, 0:1], retina[:, 1:2], marker='.', c=hits)
-    plt.xlim([-0.35, 0.35])
-    plt.ylim([-0.35, 0.35])
-    plt.show()
-    # """
 
 if __name__=="__main__":
     main()
