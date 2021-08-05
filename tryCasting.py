@@ -2,6 +2,8 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 
+import math
+
 
 def setupScene(seeLines, nPoints, w, h, rays, nRays):
 
@@ -77,7 +79,7 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
     # setup data structs to hold info
     hits =  [0] * nRays                     # hit distances of rays, 0 if no intersection
     searchRay = [True] * nRays              # store if corresponding ray index has hit yet
-    onv = np.zeros((nRays, 3))               # store colors of the ray hits, black (0, 0, 0) if not hit 
+    onv = np.ones((nRays, 3))               # store colors of the ray hits, white (1, 1, 1) if not hit 
 
     for t in np.arange(0, 10, 0.1):
 
@@ -100,6 +102,8 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
             hit, closeIdx = octreeSearch(cur, octree, pcdPoints, seeHits)
 
             if hit == True:
+                onv[i] = colors[closeIdx]
+                
                 hits[i] = t
                 searchRay[i] = False
 
@@ -117,32 +121,83 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
     print("Done")
     # input("Done!, press Enter to continue...")
 
+    # just to experiment with where the sphere falls in the ray distribution
+    # for i in range(0, 10):
+    #     input("enter")
+    #     pcd.translate([0.1, 0, 0])
+
+    #     scene.update_geometry(pcd)
+    #     scene.poll_events()
+    #     scene.update_renderer()
+
     return onv, hits, searchRay
 
 # plot ray hits and misses, or hit distances
-def visualizeHits(rays, hits, searchRay, distance=True):
-    
-    # visualize hit distance
-    hits += np.min(hits)
-    hits /= np.max(hits)
+def visualizeHits(rays, hits, searchRay, binaryHits, type='', distance=True):
 
-    # just visualize if there was a hit or not
-    color = np.zeros(len(hits))
-    for i, s in enumerate(searchRay):
-        if s == False:
-            color[i] = 1
+    title = ''
 
-    if distance:
-        plt.scatter(rays[:, 0:1], rays[:, 1:2], marker='.', c=hits)
+    # set default background color for rays that didn't intersect w/ geometry
+    color = ['dimgrey'] * len(hits)
+
+    if type == 'events' and binaryHits is not None:
+        title = 'Events'
+
+        for i, s in enumerate(binaryHits):
+            if s == -1:
+                # color[i] = 0.5
+                color[i] = 'dodgerblue'
+            elif s == 1:
+                # color[i] = 1
+                color[i] = 'coral'
+
+    elif type == 'distance':
+        title = 'Distance to Surface'
+
+        # visualize hit distance
+        hits += np.min(hits)
+        hits /= np.max(hits)
+
+        color = hits
+
     else:
-        plt.scatter(rays[:, 0:1], rays[:, 1:2], marker='.', c=color)
+        title = 'Hit Locations'
+        for i, s in enumerate(searchRay):
+            if s == False:
+                # color[i] = 1
+                color[i] = 'coral'
 
+    plt.title(title)
+    plt.scatter(rays[:, 0:1], rays[:, 1:2], marker='.', c=color)
     plt.xlim([-0.35, 0.35])
     plt.ylim([-0.35, 0.35])
     plt.show()
 
 
-def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribution=False, nPoints=10000, w=200, h=200):
+# take the diff in greyscale values, reutrn a vector with {-1, 0, 1} aka events
+def convertONV(curOnv, prevOnv):
+
+    deltaOnv = curOnv - prevOnv
+
+    negIdx  = np.argwhere(deltaOnv < 0)
+    posIdx  = np.argwhere(deltaOnv > 0)
+    zeroIdx = np.argwhere(deltaOnv == 0)
+
+    # make deltaOnv into -1, 0, 1
+    binaryDeltaOnv = deltaOnv
+    binaryDeltaOnv[negIdx]  = -1
+    binaryDeltaOnv[posIdx]  = 1
+    binaryDeltaOnv[zeroIdx] = 0
+
+    neg  = len(negIdx)
+    pos  = len(posIdx)
+    zero = len(zeroIdx)
+    print(f'Zero: {zero}, Dim: {neg}, Bright: {pos}')
+
+    return binaryDeltaOnv
+
+
+def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, nPoints=10000, w=200, h=200):
 
     nRays = len(rays)
 
@@ -151,20 +206,71 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
     # create octree
     octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
 
-    for step in range(0, 2):
-        pcd.translate([0.1, 0, 0])
-        # octree.translate([0.1, 0, 0])     # Not implemented... so we have to keep clearing and adding in the geometry
+    greyKernel = np.array([0.299, 0.587, 0.114])
+    lastOnv = None
+    curOnv  = None
+    binaryDeltaOnv = None
 
-        octree.clear()
-        octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
-        onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
+    # TODO: build out system to move the sphere across the screen
+    delta = 0.2
+    moveLeft = [0.1, 0, 0]
+    nZeros = 0
 
-        # print("# rays that missed: ", np.count_nonzero(searchRay))
+    pol = 1
+    direction = 'R'
+    if delta < 0:
+        pol = -1
+        direction = 'L'
 
-        if seeDistribution:
-            visualizeHits(rays, hits, searchRay)
+    # figure out how many steps to take based on dx
+    distX = 1.5 - (-1.5) + 2 * 0.25      # maxX - minX + 2 * radius of sphere + little extra
+    nStepsX = math.ceil(distX / delta * pol) # ceil to make sure x is always reset correctly after the inner loop runs
+
+    # keep y movement constant to get screen coverage
+    nStepsY = 4
+
+    pcd.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
+
+    data = []
+    labels = []
+
+    for i in range(0, int(nStepsY)):
+        for j in range(0, int(nStepsX)):
+            pcd.translate(moveLeft)
+            
+            # octree.translate([0.1, 0, 0])     # Not implemented... so we have to keep clearing and adding in the geometry
+            octree.clear()
+            octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
+            
+            onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
+            curOnv = np.sum(onv * greyKernel, axis=1)
+
+            # process onv, save data and corresponding label
+            if lastOnv is not None:
+                binaryDeltaOnv = convertONV(curOnv, lastOnv)
+
+                data.append(binaryDeltaOnv)
+                labels.append(moveLeft)
+
+            lastOnv = curOnv
+
+            # print("# rays that missed: ", np.count_nonzero(searchRay))
+
+            if seeDistribution:
+                visualizeHits(rays, hits, searchRay, binaryDeltaOnv, type='events')
+    
+        pcd.translate((-nStepsX * delta, 0.1, 0))
 
     scene.destroy_window()
+
+    if saveData:
+        data = np.array(data)
+        labels  = np.array(labels)
+
+        np.save(f'data/data_dist_{delta*pol}_{direction}', data)
+        np.save(f'data/labels_dist_{delta*pol}_{direction}', labels)
+
+        print(nZeros, data.shape, labels.shape)
 
 
 #*************************************************************#
@@ -196,7 +302,7 @@ def main():
     pupil = np.array([0, 0, 0.5])
 
     # TODO: delta onv or hits, aka data collection pipeline
-    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True, w=600, h=600)
+    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True, saveData=True, w=600, h=600)
 
 
 if __name__=="__main__":
