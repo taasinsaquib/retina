@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 
 import math
 import time
+import torch
+
+from deepLearning import loadModel
 
 
 def setupScene(seeLines, nPoints, w, h, rays, nRays):
@@ -198,7 +201,7 @@ def convertONV(curOnv, prevOnv):
     return binaryDeltaOnv
 
 
-def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, nPoints=10000, w=200, h=200):
+def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, model=None, nPoints=10000, w=200, h=200):
 
     nRays = len(rays)
 
@@ -226,7 +229,8 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
     # keep y movement constant to get screen coverage
     nStepsY = 15
 
-    pcd.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
+    # pcd.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
+    pcd.translate((-delta * nStepsX//8, 0, 0))
 
     data = []
     labels = []
@@ -251,16 +255,33 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
             if lastOnv is not None:
                 binaryDeltaOnv = convertONV(curOnv, lastOnv)
 
-                data.append(binaryDeltaOnv)
+                if model is not None:
+                    squareOnv = np.reshape(binaryDeltaOnv, (120, 120))  # 14400 photoreceptors reshaped to a 120*120 square
+                    channelEvents = np.zeros((1, 2, 120, 120))
 
-                if np.count_nonzero(searchRay) > nRays - 10:
-                    labels.append([0, 0, 0])
-                    nZeros += 1
-                    centers.append([0, 0, 0])
-                else:
-                    labels.append(moveLeft)
-                    print(pcd.get_center())
-                    centers.append(pcd.get_center())
+                    bright = np.argwhere(squareOnv > 0)
+                    dim    = np.argwhere(squareOnv < 0)
+
+                    channelEvents[0][0][bright[:, :2]] = 1
+                    channelEvents[0][1][dim[:, :2]]    = -1
+
+                    input = torch.from_numpy(channelEvents)
+                    with torch.no_grad():
+                        output = model(input)
+                    print(output.cpu().numpy(), moveLeft)   # for now, labels are how much the pcd was translated
+                                                            # TODO: experiment with deltaGaze and center of pcd
+
+                elif saveData:
+                    data.append(binaryDeltaOnv)
+
+                    if np.count_nonzero(searchRay) > nRays - 10:
+                        labels.append([0, 0, 0])
+                        nZeros += 1
+                        centers.append([0, 0, 0])
+                    else:
+                        labels.append(moveLeft)
+                        print(pcd.get_center())
+                        centers.append(pcd.get_center())
 
             lastOnv = curOnv
 
@@ -290,10 +311,12 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
 
 def main():
 
+    # Load retina distribution, shift along z-axis
     retina = np.load('./data/retina_dist.npy')
     retina = retina[:14400]
     retina[:, 2] += 1
 
+    # experimental rays
     rays = np.array([
         [0, 0, 2],
         [0.1, 0, 2],
@@ -310,16 +333,21 @@ def main():
         [0, -0.75, 2],
     ])
 
+    # location of eye pinhole
     pupil = np.array([0, 0, 0.5])
 
-    rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1]
-    # rates = [1]
+    # rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1]
+    rates = [-0.4]
+
+    # load model
+    m = None
+    m = loadModel('./models/onv_resnet_v1_dict')
 
     for r in rates:
         t1 = time.perf_counter()
 
         for i in [1, -1]:
-            sphereRetinaRayCast(retina, pupil, r*i, seeLines=False, seeHits=False, seeDistribution=False, saveData=True, w=600, h=600)
+            sphereRetinaRayCast(retina, pupil, r*i, seeLines=False, seeHits=False, seeDistribution=True, saveData=False, model=m, w=600, h=600)
 
         t2 = time.perf_counter()
 

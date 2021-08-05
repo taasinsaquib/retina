@@ -1,30 +1,14 @@
 import numpy as np
 import torch
-import torch.nn as nn
-import torchvision
 from torch._C import device
 
 from animation import moveLeft, moveRight, moveUp, moveDown
-from MyResnet import MyResNet
+from deepLearning import loadModel
 
 import open3d as o3d
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 eyeCenter = [0, 0, 3]
-
-def loadModel(path):
-    modResnet = torchvision.models.resnet18(pretrained=True)
-    modResnet.fc = nn.Linear(512, 3)
-
-    model = MyResNet(modResnet)
-    model.load_state_dict(torch.load(path, map_location=device))
-    
-    model.double()
-    model.to(device)
-    model.eval()
-
-    return model
 
 # create sphere
 mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
