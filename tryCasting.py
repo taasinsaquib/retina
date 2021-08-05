@@ -3,6 +3,7 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 
 import math
+import time
 
 
 def setupScene(seeLines, nPoints, w, h, rays, nRays):
@@ -118,7 +119,7 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
         scene.poll_events()
         scene.update_renderer()
 
-    print("Done")
+    # print("Done")
     # input("Done!, press Enter to continue...")
 
     # just to experiment with where the sphere falls in the ray distribution
@@ -197,7 +198,7 @@ def convertONV(curOnv, prevOnv):
     return binaryDeltaOnv
 
 
-def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, nPoints=10000, w=200, h=200):
+def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, nPoints=10000, w=200, h=200):
 
     nRays = len(rays)
 
@@ -207,13 +208,9 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
     octree = o3d.geometry.Octree(max_depth=4)                   # > 4 makes search return empty later
 
     greyKernel = np.array([0.299, 0.587, 0.114])
-    lastOnv = None
-    curOnv  = None
-    binaryDeltaOnv = None
 
-    # TODO: build out system to move the sphere across the screen
-    delta = 0.2
-    moveLeft = [0.1, 0, 0]
+    # system to move the sphere across the screen
+    moveLeft = [delta, 0, 0]
     nZeros = 0
 
     pol = 1
@@ -223,18 +220,23 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
         direction = 'L'
 
     # figure out how many steps to take based on dx
-    distX = 1.5 - (-1.5) + 2 * 0.25      # maxX - minX + 2 * radius of sphere + little extra
+    distX = 3 - (-3) + 2 * 0.25      # maxX - minX + 2 * radius of sphere + little extra
     nStepsX = math.ceil(distX / delta * pol) # ceil to make sure x is always reset correctly after the inner loop runs
 
     # keep y movement constant to get screen coverage
-    nStepsY = 4
+    nStepsY = 15
 
     pcd.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
 
     data = []
     labels = []
+    centers = []
 
     for i in range(0, int(nStepsY)):
+        lastOnv = None
+        curOnv  = None
+        binaryDeltaOnv = None
+
         for j in range(0, int(nStepsX)):
             pcd.translate(moveLeft)
             
@@ -250,7 +252,15 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
                 binaryDeltaOnv = convertONV(curOnv, lastOnv)
 
                 data.append(binaryDeltaOnv)
-                labels.append(moveLeft)
+
+                if np.count_nonzero(searchRay) > nRays - 10:
+                    labels.append([0, 0, 0])
+                    nZeros += 1
+                    centers.append([0, 0, 0])
+                else:
+                    labels.append(moveLeft)
+                    print(pcd.get_center())
+                    centers.append(pcd.get_center())
 
             lastOnv = curOnv
 
@@ -269,8 +279,9 @@ def sphereRetinaRayCast(rays, pupil, seeLines=False, seeHits=False, seeDistribut
 
         np.save(f'data/data_dist_{delta*pol}_{direction}', data)
         np.save(f'data/labels_dist_{delta*pol}_{direction}', labels)
+        np.save(f'data/centers_dist_{delta*pol}_{direction}', labels)
 
-        print(nZeros, data.shape, labels.shape)
+        print(f'#Zero labels: {nZeros}, Data: {data.shape}, Labels: {labels.shape}')
 
 
 #*************************************************************#
@@ -301,9 +312,18 @@ def main():
 
     pupil = np.array([0, 0, 0.5])
 
-    # TODO: delta onv or hits, aka data collection pipeline
-    sphereRetinaRayCast(retina, pupil, seeLines=False, seeHits=False, seeDistribution=True, saveData=True, w=600, h=600)
+    rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1]
+    # rates = [1]
 
+    for r in rates:
+        t1 = time.perf_counter()
+
+        for i in [1, -1]:
+            sphereRetinaRayCast(retina, pupil, r*i, seeLines=False, seeHits=False, seeDistribution=False, saveData=True, w=600, h=600)
+
+        t2 = time.perf_counter()
+
+        print(f'Minutes to complete {0.1} - {(t2-t1) / 60}')
 
 if __name__=="__main__":
     main()
