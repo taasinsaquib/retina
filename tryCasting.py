@@ -6,6 +6,8 @@ import math
 import time
 import torch
 
+from scipy.spatial.transform import Rotation as R
+
 from deepLearning import loadModel
 
 
@@ -19,7 +21,7 @@ def setupScene(seeLines, nPoints, w, h, rays, nRays):
 
     # point cloud (pcd) from mesh (to add to KDTree)
     pcd = mesh_sphere.sample_points_poisson_disk(nPoints)
-    pcd.translate([0, 0, -3])
+    pcd.translate([0, 0, -2.5])
 
     # set up scene with pcd
     scene = o3d.visualization.VisualizerWithKeyCallback()
@@ -200,8 +202,35 @@ def convertONV(curOnv, prevOnv):
 
     return binaryDeltaOnv
 
+def axisAngle(v1, v2):
 
-def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, model=None, nPoints=10000, w=200, h=200):
+    unit_v1 = v1 / np.linalg.norm(v1)
+    unit_v2 = v2 / np.linalg.norm(v2)
+
+    dot_product = np.dot(unit_v1, unit_v2)
+    angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
+
+    return angle
+
+# https://www.kite.com/python/answers/how-to-get-the-angle-between-two-vectors-in-python
+# https://stackoverflow.com/questions/2827393/angles-between-two-n-dimensional-vectors-in-python/13849249#13849249
+def vecAngle(pupil, lastCenter, curCenter, polX, polY):
+
+    v1 = lastCenter - pupil
+    v2 = curCenter - pupil
+
+    x = axisAngle([v1[0], v1[1]], [v2[0], v2[1]])
+    y = axisAngle([v1[0], v1[2]], [v2[0], v2[2]])
+    z = axisAngle([v1[1], v1[2]], [v2[1], v2[2]])
+
+    # not sure why that's the order, but this works
+    r = R.from_euler('xyz', [polY*z, polX*-y, x])
+
+    # return the rotation matrix
+    return np.array(r.as_matrix())
+
+
+def sphereRetinaRayCast(rays, pupil, translate, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, model=None, nPoints=10000, w=200, h=200):
 
     nRays = len(rays)
 
@@ -213,24 +242,28 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
     greyKernel = np.array([0.299, 0.587, 0.114])
 
     # system to move the sphere across the screen
-    moveLeft = [delta, 0, 0]
+    dx = translate[0]
+    dy = translate[1]
     nZeros = 0
 
-    pol = 1
+    polX = polY = 1
     direction = 'R'
-    if delta < 0:
-        pol = -1
+    if dx < 0:
+        polX = -1
         direction = 'L'
+
+    if dy < 0:
+        polY = -1
 
     # figure out how many steps to take based on dx
     distX = 3 - (-3) + 2 * 0.25      # maxX - minX + 2 * radius of sphere + little extra
-    nStepsX = math.ceil(distX / delta * pol) # ceil to make sure x is always reset correctly after the inner loop runs
+    nStepsX = math.ceil(distX / dx * polX) # ceil to make sure x is always reset correctly after the inner loop runs
 
     # keep y movement constant to get screen coverage
     nStepsY = 15
 
     # pcd.translate((-delta * nStepsX/2, -0.1 * nStepsY/2, 0))
-    pcd.translate((-delta * nStepsX//8, 0, 0))
+    pcd.translate((-dx * nStepsX//8, 0, 0))
 
     data = []
     labels = []
@@ -241,8 +274,11 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
         curOnv  = None
         binaryDeltaOnv = None
 
+        lastCenter = None
+        curCenter  = None
+
         for j in range(0, int(nStepsX)):
-            pcd.translate(moveLeft)
+            pcd.translate(translate)
             
             # octree.translate([0.1, 0, 0])     # Not implemented... so we have to keep clearing and adding in the geometry
             octree.clear()
@@ -250,11 +286,13 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
             
             onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
             curOnv = np.sum(onv * greyKernel, axis=1)
+            curCenter = pcd.get_center()
 
             # process onv, save data and corresponding label
             if lastOnv is not None:
                 binaryDeltaOnv = convertONV(curOnv, lastOnv)
 
+                # inference with nn
                 if model is not None:
                     squareOnv = np.reshape(binaryDeltaOnv, (120, 120))  # 14400 photoreceptors reshaped to a 120*120 square
                     channelEvents = np.zeros((1, 2, 120, 120))
@@ -268,9 +306,24 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
                     input = torch.from_numpy(channelEvents)
                     with torch.no_grad():
                         output = model(input)
-                    print(output.cpu().numpy(), moveLeft)   # for now, labels are how much the pcd was translated
+                    print(output.cpu().numpy(), translate)   # for now, labels are how much the pcd was translated
                                                             # TODO: experiment with deltaGaze and center of pcd
 
+                    # TODO: feed NN angle outputs to move retina (have to collect data first)
+                    # calculate shift in gaze
+
+                    r = vecAngle(pupil, lastCenter, curCenter, polX, polY)
+
+                    # rotate retina points
+                    linePoints = np.asanyarray(line_set.points)
+                    rays = rays @ r.T
+                    for i in range(0, nRays):
+                        linePoints[i*2] = rays[i]
+                    line_set.points = o3d.utility.Vector3dVector(linePoints)
+                    # TODO: do a new raycast from this location?
+                    # TODO: saccades?
+
+                # save data and label
                 elif saveData:
                     data.append(binaryDeltaOnv)
 
@@ -279,18 +332,19 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
                         nZeros += 1
                         centers.append([0, 0, 0])
                     else:
-                        labels.append(moveLeft)
+                        labels.append(translate)
                         print(pcd.get_center())
                         centers.append(pcd.get_center())
 
             lastOnv = curOnv
+            lastCenter = curCenter
 
             # print("# rays that missed: ", np.count_nonzero(searchRay))
 
             if seeDistribution:
                 visualizeHits(rays, hits, searchRay, binaryDeltaOnv, type='events')
     
-        pcd.translate((-nStepsX * delta, 0.1, 0))
+        pcd.translate((-nStepsX * dx, 0.1, 0))
 
     scene.destroy_window()
 
@@ -298,9 +352,9 @@ def sphereRetinaRayCast(rays, pupil, delta, seeLines=False, seeHits=False, seeDi
         data = np.array(data)
         labels  = np.array(labels)
 
-        np.save(f'data/data_dist_{delta*pol}_{direction}', data)
-        np.save(f'data/labels_dist_{delta*pol}_{direction}', labels)
-        np.save(f'data/centers_dist_{delta*pol}_{direction}', labels)
+        np.save(f'data/data_dist_{dx*polX}_{direction}', data)
+        np.save(f'data/labels_dist_{dx*polX}_{direction}', labels)
+        np.save(f'data/centers_dist_{dx*polX}_{direction}', labels)
 
         print(f'#Zero labels: {nZeros}, Data: {data.shape}, Labels: {labels.shape}')
 
@@ -314,7 +368,7 @@ def main():
     # Load retina distribution, shift along z-axis
     retina = np.load('./data/retina_dist.npy')
     retina = retina[:14400]
-    retina[:, 2] += 1
+    retina[:, 2] += 0.5
 
     # experimental rays
     rays = np.array([
@@ -334,20 +388,20 @@ def main():
     ])
 
     # location of eye pinhole
-    pupil = np.array([0, 0, 0.5])
+    pupil = np.array([0, 0, 0])
 
     # rates = [1, 0.8, 0.6, 0.4, 0.2, 0.1]
-    rates = [-0.4]
+    rates = [0.1]
 
     # load model
     m = None
-    m = loadModel('./models/onv_resnet_v1_dict')
+    # m = loadModel('./models/onv_resnet_v1_dict')
 
     for r in rates:
         t1 = time.perf_counter()
 
         for i in [1, -1]:
-            sphereRetinaRayCast(retina, pupil, r*i, seeLines=False, seeHits=False, seeDistribution=True, saveData=False, model=m, w=600, h=600)
+            sphereRetinaRayCast(retina, pupil, [r*i, 0, 0], seeLines=True, seeHits=False, seeDistribution=False, saveData=False, model=m, w=600, h=600)
 
         t2 = time.perf_counter()
 
@@ -355,3 +409,5 @@ def main():
 
 if __name__=="__main__":
     main()
+
+# TODO: collect data with sphere moving away from center of the retina
