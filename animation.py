@@ -1,10 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import math
-
-from pickle import load
-
 import open3d as o3d
+
+import math
 
 # Animating a sphere in this example
 

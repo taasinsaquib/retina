@@ -3,7 +3,7 @@ import torch
 from torch._C import device
 
 from animation import moveLeft, moveRight, moveUp, moveDown
-from deepLearning import loadModel
+from helpers_deepLearning import loadModel
 
 import open3d as o3d
 
