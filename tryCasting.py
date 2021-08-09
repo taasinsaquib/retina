@@ -3,7 +3,6 @@ import open3d as o3d
 
 import math
 import time
-import torch
 
 from helpers_general      import vecAngle
 from helpers_o3d          import setupScene, rayCast
@@ -125,7 +124,7 @@ def sphereRetinaRayCast(rays, pupil, translate, seeLines=False, seeHits=False, s
 
         np.save(f'data/data_dist_{dx*polX}_{direction}', data)
         np.save(f'data/labels_dist_{dx*polX}_{direction}', labels)
-        np.save(f'data/centers_dist_{dx*polX}_{direction}', labels)
+        np.save(f'data/centers_dist_{dx*polX}_{direction}', centers)
 
         print(f'#Zero labels: {nZeros}, Data: {data.shape}, Labels: {labels.shape}')
 

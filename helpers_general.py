@@ -27,3 +27,16 @@ def vecAngle(pupil, lastCenter, curCenter, polX, polY):
 
     # return the rotation matrix
     return np.array(r.as_matrix())
+
+
+def makeCircleXY(r, sampleRate=0.1):
+    # x^2 + y^2 = r^2
+
+
+    x = np.arange(-r, r+sampleRate, sampleRate) # add sampleRate to get the last point
+    y = np.sqrt(r**2 - np.square(x))            # plus/minus
+
+    x = np.hstack((x, x))
+    y = np.hstack((y, -1*y))
+
+    return zip(x, y)

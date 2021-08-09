@@ -3,7 +3,7 @@ import open3d as o3d
 
 from scipy.spatial.transform import Rotation as R
 
-from helpers_general import vecAngle
+from helpers_general import makeCircleXY, vecAngle
 
 np.set_printoptions(suppress=True)
 
@@ -116,16 +116,7 @@ def followSphere():
         # input("hi")
 
 r = 1
-
-# x^2 + y^2 = r^2
-
-x = np.arange(-r, r+0.1, 0.1)
-y = np.sqrt(r**2 - np.square(x))    # plus/minus
-
-x = np.hstack((x, x))
-y = np.hstack((y, -1*y))
-
-points = zip(x, y)
+points = makeCircleXY(r)
 
 for px, py in points:
     mesh_sphere.translate([px, py, 0])
