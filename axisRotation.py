@@ -72,73 +72,86 @@ curCenter  = None
 
 pupil = [0, 0, 0]
 
-def followSphere():
-    while True:
-        mesh_sphere.translate(delta)
-        curCenter = mesh_sphere.get_center()
+# def followSphere():
+while True:
+    mesh_sphere.translate(delta)
+    curCenter = mesh_sphere.get_center()
 
-        if prevCenter is not None:
-            x, y, z = vecAngle(pupil, axes, prevCenter, curCenter)
-            
-            print(x * 180/np.pi, y * 180/np.pi, z * 180/np.pi)
+    if prevCenter is not None:
+        r, angles = vecAngle(pupil, prevCenter, curCenter, polx, poly)
+        
+        x = angles[0]
+        y = angles[1]
+        z = angles[2]
 
-            print(poly*z, polx*y, x)
-            r = R.from_euler('xyz', [poly*z, polx*-y, x])
-            
-            ax = np.array(axes) @ np.array(r.as_matrix()).T
+        print(x * 180/np.pi, y * 180/np.pi, z * 180/np.pi)
 
-            points[1] = ax[0]
-            points[2] = ax[1]
-            # points[3] = ax[2]
+        # print(poly*z, polx*y, x)
+        # r = R.from_euler('xyz', [poly*z, polx*-y, x])
+        
+        print(axes)
+        ax = np.array(axes) @ r.T
+        print(ax)
 
-            v1 = curCenter - pupil
-            v1 = v1 / np.linalg.norm(v1)
-            points[3] = v1
+        points[1] = ax[0]
+        points[2] = ax[1]
+        # points[3] = ax[2]
 
-            points[4] = curCenter
+        v1 = curCenter - pupil
+        v1 = v1 / np.linalg.norm(v1)
+        points[3] = v1
 
-            # rotate around cur Axes
-            line_set.points = o3d.utility.Vector3dVector(points)
+        points[4] = curCenter
 
-            colors = [[0, 1, 0] for i in range(len(lines))]
-            line_set.colors = o3d.utility.Vector3dVector(colors)
+        # rotate around cur Axes
+        line_set.points = o3d.utility.Vector3dVector(points)
 
-            # rotate axes
+        colors = [[0, 1, 0] for i in range(len(lines))]
+        line_set.colors = o3d.utility.Vector3dVector(colors)
 
-        prevCenter = curCenter
+        # rotate axes
 
-        scene.update_geometry(mesh_sphere)
-        scene.update_geometry(line_set)
+        input("hi")
 
-        scene.poll_events()
-        scene.update_renderer()
-
-        # input("hi")
-
-r = 1
-points = makeCircleXY(r)
-
-for px, py in points:
-    mesh_sphere.translate([px, py, 0])
+    prevCenter = curCenter
 
     scene.update_geometry(mesh_sphere)
+    scene.update_geometry(line_set)
+
     scene.poll_events()
     scene.update_renderer()
 
-    """
-        raycast, collect data and label
-    """
+    # input("hi")
 
-    input("hi")
-    mesh_sphere.translate([-px, -py, 0])
+# def main():
 
-    scene.update_geometry(mesh_sphere)
-    scene.poll_events()
-    scene.update_renderer()
+#     r = 1
+#     points = makeCircleXY(r)
 
-    """
-        reset prev stuff
-        raycast
-    """
+#     for px, py in points:
+#         mesh_sphere.translate([px, py, 0])
 
-    input("hi2")
+#         scene.update_geometry(mesh_sphere)
+#         scene.poll_events()
+#         scene.update_renderer()
+
+#         """
+#             raycast, collect data and label
+#         """
+
+#         # input("hi")
+#         mesh_sphere.translate([-px, -py, 0])
+
+#         scene.update_geometry(mesh_sphere)
+#         scene.poll_events()
+#         scene.update_renderer()
+
+#         """
+#             reset prev stuff
+#             raycast
+#         """
+
+#         # input("hi2")
+
+# if __name__ == '__main__':
+#     main()

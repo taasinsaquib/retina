@@ -71,18 +71,18 @@ def sphereRetinaRayCast(rays, pupil, translate, seeLines=False, seeHits=False, s
             # process onv, save data and corresponding label
             if lastOnv is not None:
                 binaryDeltaOnv = convertONV(curOnv, lastOnv)
-
+                
                 # inference with nn
                 if model is not None:
 
-                    output = onvToNN(model, binaryDeltaOnv)
-                    print(output, translate)   # for now, labels are how much the pcd was translated
+                    # output = onvToNN(model, binaryDeltaOnv)
+                    # print(output, translate)   # for now, labels are how much the pcd was translated
                                                             # TODO: experiment with deltaGaze and center of pcd
 
                     # TODO: feed NN angle outputs to move retina (have to collect data first)
                     # calculate shift in gaze
 
-                    r = vecAngle(pupil, lastCenter, curCenter, polX, polY)
+                    r, angles = vecAngle(pupil, lastCenter, curCenter, polX, polY)
 
                     # rotate retina points
                     linePoints = np.asanyarray(line_set.points)
@@ -175,7 +175,7 @@ def main():
 
         t2 = time.perf_counter()
 
-        print(f'Minutes to complete {0.1} - {(t2-t1) / 60}')
+        print(f'Minutes to complete {r} - {(t2-t1) / 60}')
 
 if __name__=="__main__":
     main()

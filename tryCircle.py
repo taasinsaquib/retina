@@ -27,12 +27,14 @@ def meat(translate, scene, pcd, line_set, octree, rays, nRays, pupil, lastOnv, l
 
     octree.clear()
     octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
-    
+
     onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
     curOnv = np.sum(onv * greyKernel, axis=1)
     
     curCenter = pcd.get_center()
     binaryDeltaOnv = convertONV(curOnv, lastOnv)
+
+    r, angles = vecAngle(pupil, lastCenter, curCenter, polX, polY)
 
     # inference with nn
     if model is not None:
@@ -44,18 +46,17 @@ def meat(translate, scene, pcd, line_set, octree, rays, nRays, pupil, lastOnv, l
         # TODO: feed NN angle outputs to move retina (have to collect data first)
         # calculate shift in gaze
 
-        r = vecAngle(pupil, lastCenter, curCenter, polX, polY)
-
         # rotate retina points
         linePoints = np.asanyarray(line_set.points)
         rays = rays @ r.T
         for i in range(0, nRays):
             linePoints[i*2] = rays[i]
         line_set.points = o3d.utility.Vector3dVector(linePoints)
+    
         # TODO: do a new raycast from this location?
         # TODO: saccades?
 
-    return curOnv, binaryDeltaOnv
+    return curOnv, binaryDeltaOnv, angles
 
 
 def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribution=False, saveData=False, model=None, nPoints=10000, w=200, h=200):
@@ -73,6 +74,7 @@ def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribut
     data = []
     labels = []
     centers = []
+    angles = []
     nZeros = 0
 
     lastOnv = None
@@ -81,6 +83,10 @@ def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribut
 
     lastCenter = None
     curCenter  = None
+    centerCenter = None
+
+    curAngles = None
+    ogRays = rays       # points get rotated around
 
     # initialize the variables the first time
     octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
@@ -89,32 +95,91 @@ def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribut
     lastOnv = np.sum(onv * greyKernel, axis=1)  # data
     lastCenter = pcd.get_center()               # labels
 
+    centerCenter = lastCenter
     centerOnv = lastOnv
 
     for x, y in points:
 
         # Move AWAY FROM center ****************************************
-        
+
         # raycast, collect data and label
         translate = [x, y, 0]
 
-        curOnv, binaryDeltaOnv = meat(translate, scene, pcd, line_set, octree, rays, nRays, pupil, lastOnv, lastCenter, seeLines, seeHits, model)
+        pcd.translate(translate)
+
+        # system to move the sphere across the screen
+        x = translate[0]
+        y = translate[1]
+
+        polX = polY = 1
+        if x < 0:
+            polX = -1
+
+        if y < 0:
+            polY = -1
+
+        octree.clear()
+        octree.convert_from_point_cloud(pcd, size_expand=0.01)      # 0.01 is just from the example, seems to work fine
+        
+        onv, hits, searchRay = rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
+        curOnv = np.sum(onv * greyKernel, axis=1)
+        curCenter = pcd.get_center()
+        
+        binaryDeltaOnv = convertONV(curOnv, lastOnv)
+
+        r, curAngles = vecAngle(pupil, lastCenter, curCenter, polX, polY)
+
+        curAngles[curAngles < 1e-2] = 0
+
+        print(curAngles)
+
+        # inference with nn
+        if model is not None:
+
+            output = onvToNN(model, binaryDeltaOnv)
+            print(output, translate)   # for now, labels are how much the pcd was translated
+                                                    # TODO: experiment with deltaGaze and center of pcd
+
+            # TODO: feed NN angle outputs to move retina (have to collect data first)
+            # calculate shift in gaze
+
+            # rotate retina points
+            """
+            linePoints = np.asanyarray(line_set.points)
+            rotatedRays = rays @ r.T
+            for i in range(0, nRays):
+                linePoints[i*2] = rotatedRays[i]
+            line_set.points = o3d.utility.Vector3dVector(linePoints)
+
+            if seeLines:
+                scene.update_geometry(line_set)
+
+            scene.poll_events()
+            scene.update_renderer()
+            """
+            # TODO: do a new raycast from this location?
+            # TODO: saccades?
+
+            # curOnv, binaryDeltaOnv, curAngles = meat(translate, scene, pcd, line_set, octree, rays, nRays, pupil, lastOnv, lastCenter, seeLines, seeHits, model)
+
+            # print(curAngles)
 
         # save data and label
-        if saveData:
+        elif saveData:
             data.append(binaryDeltaOnv)
 
             if np.count_nonzero(searchRay) > nRays - 10:
                 labels.append([0, 0, 0])
                 nZeros += 1
                 centers.append([0, 0, 0])
+                angles.append([0, 0, 0])
             else:
                 labels.append(translate)
-                print(pcd.get_center())
                 centers.append(pcd.get_center())
+                angles.append(curAngles)
 
         if seeDistribution:
-            visualizeHits(rays, hits, searchRay, binaryDeltaOnv, type='events')
+            visualizeHits(ogRays, hits, searchRay, binaryDeltaOnv, type='events')
 
         lastOnv = curOnv
         lastCenter = curCenter
@@ -125,44 +190,49 @@ def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribut
         # new raycast with ball at center (actually just re-use the one at the start)
         # or collect data for movement towards...
 
+
         translate = [-x, -y, 0]
         pcd.translate(translate)
-    
-        # update graphics loop
-        scene.update_geometry(pcd)
+
+        # rotate retina points back
+        """
+        linePoints = np.asanyarray(line_set.points)
+        for i in range(0, nRays):
+            linePoints[i*2] = rays[i]
+        line_set.points = o3d.utility.Vector3dVector(linePoints)
+
         if seeLines:
             scene.update_geometry(line_set)
 
         scene.poll_events()
         scene.update_renderer()
-
-        # curOnv, binaryDeltaOnv = meat(translate, scene, pcd, line_set, octree, rays, nRays, pupil, lastOnv, lastCenter, seeLines, seeHits, model)
-
-        # # save data and label
-        # if saveData:
-        #     data.append(binaryDeltaOnv)
-
-        #     if np.count_nonzero(searchRay) > nRays - 10:
-        #         labels.append([0, 0, 0])
-        #         nZeros += 1
-        #         centers.append([0, 0, 0])
-        #     else:
-        #         labels.append(translate)
-        #         print(pcd.get_center())
-        #         centers.append(pcd.get_center())
+        """
 
         curOnv = centerOnv
+        curCenter = centerCenter
+
         binaryDeltaOnv *= -1
 
+        # save data and label
+        if saveData:
+            data.append(binaryDeltaOnv)
+        
+            if np.count_nonzero(searchRay) > nRays - 10:
+                labels.append([0, 0, 0])
+                nZeros += 1
+                centers.append([0, 0, 0])
+                angles.append([0, 0, 0])
+            else:
+                labels.append(translate)
+                centers.append(pcd.get_center())
+                angles.append([-1*curAngles[0], -1*curAngles[1], -1*curAngles[2]])
 
-        if seeDistribution:
-            visualizeHits(rays, hits, searchRay, binaryDeltaOnv, type='events')
-
+        # if seeDistribution:
+            # visualizeHits(rays, hits, searchRay, binaryDeltaOnv, type='events')
 
         lastOnv = curOnv
         lastCenter = curCenter
 
-        # input("hi2")
 
     scene.destroy_window()
 
@@ -170,9 +240,10 @@ def collectData(rays, pupil, radius, seeLines=False, seeHits=False, seeDistribut
         data = np.array(data)
         labels  = np.array(labels)
 
-        np.save(f'data/data_circle_away_{radius}',     data)
-        np.save(f'data/labels_circle_away_{radius}',   labels)
-        np.save(f'data/centers__circle_away_{radius}', centers)
+        np.save(f'data/data_circle_away_{radius}',    data)
+        np.save(f'data/labels_circle_away_{radius}',  labels)
+        np.save(f'data/centers_circle_away_{radius}', centers)
+        np.save(f'data/angles_circle_away_{radius}',  angles)
 
         print(f'#Zero labels: {nZeros}, Data: {data.shape}, Labels: {labels.shape}')
 
@@ -204,16 +275,15 @@ def main():
     # location of eye pinhole
     pupil = np.array([0, 0, 0])
 
-    radii = [1]
-
+    radii = np.linspace(0, 2, 0.1)
     # load model
-    m = None
-    # m = loadModel('./models/onv_resnet_v1_dict')
+    # m = None
+    m = loadModel('./models/onv_resnet_v1_dict')
 
     for r in radii:
         t1 = time.perf_counter()
         
-        collectData(retina, pupil, r, seeLines=True, seeHits=False, seeDistribution=True, saveData=False, model=m, w=600, h=600)
+        collectData(retina, pupil, r, seeLines=True, seeHits=False, seeDistribution=True, saveData=True, model=m, w=600, h=600)
 
         t2 = time.perf_counter()
         
@@ -224,3 +294,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# TODO: angles somehow wrong
+# TODO: add noise to data?
