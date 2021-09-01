@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+import random
+
 def axisAngle(v1, v2):
 
     unit_v1 = v1 / np.linalg.norm(v1)
@@ -23,21 +25,32 @@ def vecAngle(pupil, lastCenter, curCenter, polX, polY):
     z = axisAngle([v1[0], v1[1]], [v2[0], v2[1]])
 
     angles = np.array([polY * x, polX * -y, 0])
-
     r = R.from_euler('xyz', angles)
 
     # return the rotation matrix
     return np.array(r.as_matrix()), angles
 
 
-def makeCircleXY(r, sampleRate=0.1):
+def makeCircleXY(r, sampleRate=0.01):
     # x^2 + y^2 = r^2
 
     x = np.arange(-r, r+sampleRate, sampleRate) # add sampleRate to get the last point
-    # print(r**2 - np.square(x))
-    y = np.sqrt(r**2 - np.square(x))            # plus/minus
+    
+    ySquared = (r**2 - np.square(x))
+    ySquared[ySquared < 1e-4] = 0       # prevent negative numbers
+    y = np.sqrt(ySquared)               # plus/minus
 
     x = np.hstack((x, x))
     y = np.hstack((y, -1*y))
 
     return zip(x, y)
+
+
+def generateRandPoint(x, y, z):
+
+    # thousandth place
+    xCoord = round(random.uniform(-x,x), 3)
+    yCoord = round(random.uniform(-y,y), 3)
+    zCoord = round(random.uniform(z,-2), 3)
+
+    return np.array([xCoord, yCoord, zCoord])

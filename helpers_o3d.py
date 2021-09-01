@@ -11,7 +11,8 @@ def setupScene(seeLines, nPoints, w, h, rays, nRays):
 
     # point cloud (pcd) from mesh (to add to KDTree)
     pcd = mesh_sphere.sample_points_poisson_disk(nPoints)
-    pcd.translate([0, 0, -2.5])
+    # pcd.translate([0, 0, -2.5])
+    pcd.translate([0, 0, -5])
 
     # set up scene with pcd
     scene = o3d.visualization.VisualizerWithKeyCallback()
@@ -40,6 +41,23 @@ def setupScene(seeLines, nPoints, w, h, rays, nRays):
 
         line_set.colors = o3d.utility.Vector3dVector(colors)
         scene.add_geometry(line_set)
+
+    # box in front of pupil
+    x = 5
+    y = 5
+    z = -10
+    p = [[-x, y, -2], [x, y, -2], [-x, -y, -2], [x, -y, -2],
+         [-x, y, z], [x, y, z], [-x, -y, z], [x, -y, z]]
+    l = [[0,1], [2,3], [0,2], [1,3],
+         [4,5], [6,7], [4,6], [5,8],
+         [0, 4], [1, 5], [2, 6], [3, 7]]
+
+    ls = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(p),
+        lines=o3d.utility.Vector2iVector(l),
+    )
+
+    scene.add_geometry(ls)
 
     return pcd, scene, line_set
 
@@ -77,7 +95,7 @@ def rayCast(rays, nRays, pupil, scene, pcd, octree, seeLines, line_set, seeHits)
     searchRay = [True] * nRays              # store if corresponding ray index has hit yet
     onv = np.ones((nRays, 3))               # store colors of the ray hits, white (1, 1, 1) if not hit 
 
-    for t in np.arange(0, 10, 0.1):
+    for t in np.arange(0, 22, 0.1):
 
         pcdPoints = np.asanyarray(pcd.points)
         colors = np.asarray(pcd.colors)
