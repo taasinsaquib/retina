@@ -116,28 +116,3 @@ def FC1toNN(model, binaryDeltaOnv):
 #******************************#
 # Data Collection / Processing
 #******************************#
-
-# take the diff in greyscale values, reutrn a vector with {-1, 0, 1} aka events
-def convertONV(curOnv, prevOnv):
-
-    deltaOnv = curOnv - prevOnv
-
-    negIdx  = np.argwhere(deltaOnv < 0)
-    posIdx  = np.argwhere(deltaOnv > 0)
-    zeroIdx = np.argwhere(deltaOnv == 0)
-
-    # make deltaOnv into -1, 0, 1
-    binaryDeltaOnv = deltaOnv
-    binaryDeltaOnv[negIdx]  = -1
-    binaryDeltaOnv[posIdx]  = 1
-    # binaryDeltaOnv[zeroIdx] = 0
-
-    neg  = len(negIdx)
-    pos  = len(posIdx)
-    zero = len(zeroIdx)
-    print(f'Zero: {zero}, Dim: {neg}, Bright: {pos}')
-
-    return binaryDeltaOnv
-
-def convertONVDiff(curOnv, prevOnv):
-  return curOnv - prevOnv
