@@ -3,6 +3,8 @@ from scipy.spatial.transform import Rotation as R
 
 import random
 
+random.seed(528)
+
 def axisAngle(v1, v2):
 
     unit_v1 = v1 / np.linalg.norm(v1)

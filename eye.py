@@ -3,20 +3,23 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 
 class Eye:
-    def __init__(self, pupil, rays):
+    def __init__(self, pupil, rays, rgb=False, magnitude=False):
         """
             pupil,  [x, y, z], position of pinhole
         """
         self.pupil = pupil
         self.rays  = self.ogRays = rays     # og for visualization because they change when rotating
         self.nRays = len(rays)
-        
+
+        self.rgb       = rgb
+        self.magnitude = magnitude
+
         self.visRetina = np.load('./data/retina_dist.npy')[:14400]
 
         self.prevOnv = None
         self.curOnv  = None
         self.greyKernel = np.array([0.299, 0.587, 0.114])
-        self.binaryDeltaOnv = None
+        self.binaryDeltaOnv = None                          # misnamed, could be binary or magnitude
 
         self.hits      = None
         self.searchRay = None
@@ -62,7 +65,7 @@ class Eye:
 
         if leaf is not None:
             # print("HIT", octree.is_point_in_bound(cur, octree.origin, octree.size), cur, leaf.color, leaf.indices)
-            
+
             # get L2 distance from current point to points in the leaf node
             candidates = pcdPoints[leaf.indices]
             dist = np.linalg.norm(candidates - cur, axis=1)
@@ -107,7 +110,7 @@ class Eye:
 
                 if hit == True:
                     onv[i] = colors[closeIdx]
-                    
+
                     hits[i] = t
                     searchRay[i] = False
 
@@ -134,20 +137,31 @@ class Eye:
         #     scene.poll_events()
         #     scene.update_renderer()
 
-        onv = np.sum(onv * self.greyKernel, axis=1)
+        if (self.rgb == True):
+            onv = onv.flatten('F')
+        else:
+            onv = np.sum(onv * self.greyKernel, axis=1)
 
         if self.prevOnv is None:
             self.prevOnv = onv
         else:
             self.curOnv = onv
-            self.convertONV()
+
+            if self.magnitude:
+                self.convertONVMagnitude()
+            else:
+                self.convertONVBinary()
+            
+            # print('r', self.binaryDeltaOnv[0:10])
+            # print('g', self.binaryDeltaOnv[14400:14410])
+            # print('b', self.binaryDeltaOnv[28800:28810])
 
         self.hits      = hits
         self.searchRay = searchRay
 
     # NOTE: prevOnv and curOnv can't be None
-    # take the diff in greyscale values, reutrn a vector with {-1, 0, 1} aka events
-    def convertONV(self):
+    # take the diff in greyscale values, return a vector with {-1, 0, 1} aka events
+    def convertONVBinary(self):
 
         deltaOnv = self.curOnv - self.prevOnv
 
@@ -170,7 +184,7 @@ class Eye:
 
         # return binaryDeltaOnv
 
-    def convertONVDiff(self):
+    def convertONVMagnitude(self):
         # return self.curOnv - self.prevOnv
         self.binaryDeltaOnv = self.curOnv - self.prevOnv
 
@@ -214,6 +228,75 @@ class Eye:
         plt.xlim([-0.35, 0.35])
         plt.ylim([-0.35, 0.35])
         plt.show()
+
+    # repeating code here
+
+    def binary(self, onv):
+        negIdx  = np.argwhere(onv < 0)
+        posIdx  = np.argwhere(onv > 0)
+        zeroIdx = np.argwhere(onv == 0)
+
+        # make deltaOnv into -1, 0, 1
+        binaryDeltaOnv = onv
+        binaryDeltaOnv[negIdx]  = -1
+        binaryDeltaOnv[posIdx]  = 1
+        binaryDeltaOnv[zeroIdx] = 0
+
+        neg  = len(negIdx)
+        pos  = len(posIdx)
+        zero = len(zeroIdx)
+        print(f'Zero: {zero}, Dim: {neg}, Bright: {pos}')
+
+        return binaryDeltaOnv
+
+    def color(self, onv):
+        color = ['dimgrey'] * len(self.hits)
+
+        for i, s in enumerate(onv):
+            if s == -1:
+                # color[i] = 0.5
+                color[i] = 'dodgerblue'
+            elif s == 1:
+                # color[i] = 1
+                color[i] = 'coral'
+
+        return color
+    
+    def visualizeRGB(self):
+        fig, axs = plt.subplots(1, 3)
+
+        r = self.binaryDeltaOnv[      :14400 ]
+        g = self.binaryDeltaOnv[ 14400:28800 ]
+        b = self.binaryDeltaOnv[ 28800:      ]
+
+        print("red")
+        rBin = self.binary(r)
+        print("green")
+        gBin = self.binary(g)
+        print("blue")
+        bBin = self.binary(b)
+
+        rCol = self.color(rBin)
+        gCol = self.color(gBin)
+        bCol = self.color(bBin)
+        
+        axs[0].set_title('Red?')
+        axs[0].set_xlim([-0.35, 0.35])
+        axs[0].set_ylim([-0.35, 0.35])
+        axs[0].scatter(self.visRetina[:, 0:1], self.visRetina[:, 1:2], marker='.', c=rCol)
+
+        axs[1].set_title('Green?')
+        axs[1].set_xlim([-0.35, 0.35])
+        axs[1].set_ylim([-0.35, 0.35])
+        axs[1].scatter(self.visRetina[:, 0:1], self.visRetina[:, 1:2], marker='.', c=gCol)
+
+        axs[2].set_title('Blue?')
+        axs[2].set_xlim([-0.35, 0.35])
+        axs[2].set_ylim([-0.35, 0.35])
+        axs[2].scatter(self.visRetina[:, 0:1], self.visRetina[:, 1:2], marker='.', c=bCol)
+
+        plt.show()
+
 
 def main():
     pass

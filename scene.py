@@ -1,6 +1,8 @@
 import numpy  as np
 import open3d as o3d
 
+import time
+
 from eye import Eye
 
 from helpers_general      import vecAngle, generateRandPoint
@@ -67,6 +69,8 @@ class BallScene:
         scene.create_window(window_name='Main Scene', width=self.w, height=self.h, left=200, top=100, visible=True)
         scene.add_geometry(pcd)
 
+        # scene.get_render_option().light_on = True
+
         sceneControl = scene.get_view_control()
         sceneControl.set_zoom(1.5)
 
@@ -131,6 +135,7 @@ class BallScene:
 
             # raycast, collect data and label
             translate = position1 - np.array(curCenter)
+            # translate = np.array([0, 0.75, 0])
             self.pcd.translate(translate)
 
             # system to move the sphere across the screen
@@ -162,7 +167,7 @@ class BallScene:
                 rotateSpot += self.rEye.getPupil()
                 rotateSpot = rotateSpot / 2.0
             r, curAngles = vecAngle(rotateSpot, lastCenter, curCenter, polX, polY)
-            print(curAngles)
+            print(curAngles * 180/np.pi)
 
             skip = False
 
@@ -206,11 +211,13 @@ class BallScene:
                 if np.count_nonzero(self.lEye.searchRay) > self.nRays - 10:
                     skip = True                
                 else:
+                    # print(binaryDeltaOnv.shape)
                     data.append(binaryDeltaOnv)
                     angles.append(curAngles[:2])
 
             if self.seeDistribution:
                 self.lEye.visualizeHits(type='events')
+                self.lEye.visualizeRGB()
                 if self.rEye is not None:
                     self.rEye.visualizeHits(type='events')
 
@@ -253,13 +260,19 @@ def main():
     retinaR[:, 0:1] += 1.0
     retinaR[:, 2:3] += 0.5
 
-    lEye = Eye(pupilL, retinaL)
-    rEye = Eye(pupilR, retinaR)
+    lEye = Eye(pupilL, retinaL, rgb=True, magnitude=True)
+    # rEye = Eye(pupilR, retinaR, rgb=True, magnitude=True)
+    rEye = None
     # TODO: make a right eye, figure out how to place them together
 
-    scene = BallScene(lEye, rEye, seeLines=False, seeHits=False, seeDistribution=True, saveData=False)
+    scene = BallScene(lEye, rEye, seeLines=False, seeHits=False, seeDistribution=True, saveData=True)
     scene.setup()
+
+    t1 = time.perf_counter()
     scene.simulate()
+    t2 = time.perf_counter()
+
+    print(f'Minutes to complete 1000pts - {(t2-t1) / 60}')
 
 if __name__ == "__main__":
     main()
@@ -267,12 +280,10 @@ if __name__ == "__main__":
 
 # TODO
 """
-* pass points to simulate
-* create right eye
-    * how far should it be from left?
-    * are angles with respect to the center of the pupils?
-* document
+* lighting, read paper to see 
+    all points have the same blue, need normals too?
+    randomize lighting spots?
 
-* figure out linet KNN to split in half
-* write network to split retina in half
+
+
 """
