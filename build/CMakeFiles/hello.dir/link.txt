@@ -1,0 +1,1 @@
+/Library/Developer/CommandLineTools/usr/bin/c++  -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.1.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/hello.dir/simulation.cpp.o -o ../bin/hello  -Wl,-rpath,/Users/Saquib/opt/anaconda3/envs/snn/lib /Users/Saquib/opt/anaconda3/envs/snn/lib/libpython3.8.dylib 

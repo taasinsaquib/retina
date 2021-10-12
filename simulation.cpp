@@ -1,28 +1,22 @@
-// #include <Python/Python.h>
-#include "Python.h"     // squiggle goes away w/ compile flag
+#include <iostream>
+#include <vector>
+#include <assert.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/embed.h>  // python interpreter
+#include <pybind11/stl.h>  // type conversion
 
-#include <stdio.h>
+namespace py = pybind11;
 
 int main() {
-     
-    // boilerplate
-    Py_Initialize();
-    PyObject* sys = PyImport_ImportModule("sys");
-    PyObject* path = PyObject_GetAttrString(sys, "path");
-    PyList_Append(path, PyString_FromString("."));
-     
-    PyObject* ModuleString = PyString_FromString((char*) "simulation_func");
-    PyObject* Module = PyImport_Import(ModuleString);
-    PyObject* Dict = PyModule_GetDict(Module);
-    
-    PyObject* Func = PyDict_GetItemString(Dict, "func");
-    PyObject* args = PyTuple_Pack(1, PyFloat_FromDouble(2.0));
-    PyObject* Result = PyObject_CallObject(Func, args);
 
-//    Py_DECREF(pValue);
-//    Clean up
-//    Py_DECREF(pModule);
-//    Py_DECREF(pName);
+    py::scoped_interpreter guard{};
 
-    Py_Finalize();
+    // py::module_ sys = py::module_::import("sys");
+    // py::print(sys.attr("path"));
+
+    py::module_ sim = py::module_::import("simulation_func");
+
+    py::object result = sim.attr("func")(5);
+    int n = result.cast<int>();
+    assert(n == 10);
 }

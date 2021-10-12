@@ -1,0 +1,3 @@
+/Users/Saquib/Desktop/thesis/retina/build/CMakeFiles/rebuild_cache.dir
+/Users/Saquib/Desktop/thesis/retina/build/CMakeFiles/edit_cache.dir
+/Users/Saquib/Desktop/thesis/retina/build/CMakeFiles/hello.dir

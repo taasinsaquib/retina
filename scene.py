@@ -126,7 +126,7 @@ class BallScene:
 
         lastCenter = self.pcd.get_center()
 
-        for i in range(1000):
+        for i in range(4000):
 
             position1 = generateRandPoint(2.5, 2.5, -10)
             curCenter = self.pcd.get_center()
@@ -265,7 +265,7 @@ def main():
     rEye = None
     # TODO: make a right eye, figure out how to place them together
 
-    scene = BallScene(lEye, rEye, seeLines=False, seeHits=False, seeDistribution=True, saveData=True)
+    scene = BallScene(lEye, rEye, seeLines=False, seeHits=False, seeDistribution=False, saveData=True)
     scene.setup()
 
     t1 = time.perf_counter()
@@ -280,10 +280,11 @@ if __name__ == "__main__":
 
 # TODO
 """
+* try new data with LiNet
+
 * lighting, read paper to see 
     all points have the same blue, need normals too?
     randomize lighting spots?
 
-
-
+* headless rendering for speed
 """
