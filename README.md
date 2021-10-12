@@ -11,6 +11,6 @@ Re-creating a retina model with Open3D
 ### CMAKE
 * install: https://cmake.org/install/
 * hello world: https://tuannguyen68.gitbooks.io/learning-cmake-a-beginner-s-guide/content/chap1/chap1.html
-* Compile pybind11: https://pybind11.readthedocs.io/en/stable/advanced/embedding.html
+* Compile pybind11 for embedding modules: https://pybind11.readthedocs.io/en/stable/advanced/embedding.html
     * `cmake -H. -Bbuild`
     * `cmake --build build -- -j3`
