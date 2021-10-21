@@ -54,22 +54,32 @@ class BallScene:
 
     def setup(self):
         # create sphere
-        sphereColor = [0.1, 0.1, 0.7]
+        # sphereColor = [0.1, 0.1, 0.7] # blue
+        sphereColor = [1., 1., 1.]
         mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1.0)
         mesh_sphere.compute_vertex_normals()
         mesh_sphere.paint_uniform_color(sphereColor)
+        mesh_sphere.compute_vertex_normals()
 
         # point cloud (pcd) from mesh (to add to KDTree)
         pcd = mesh_sphere.sample_points_poisson_disk(self.nRays)
-        # pcd.translate([0, 0, -2.5])
         pcd.translate([0, 0, -5])
+        # pcd.estimate_normals()
 
         # set up scene with pcd
         scene = o3d.visualization.VisualizerWithKeyCallback()
         scene.create_window(window_name='Main Scene', width=self.w, height=self.h, left=200, top=100, visible=True)
         scene.add_geometry(pcd)
 
-        # scene.get_render_option().light_on = True
+        # Add point light
+        # scene.get_render_option().set_lighting(o3d.Open3DScene.LightingProfile.MED_SHADOWS, np.asarray(0.5, -0.5, -0.5))
+
+        # Phong lighting
+        scene.get_render_option().light_on = True
+        
+
+        # Black Background
+        scene.get_render_option().background_color = np.asarray([0, 0, 0])
 
         sceneControl = scene.get_view_control()
         sceneControl.set_zoom(1.5)
@@ -87,18 +97,21 @@ class BallScene:
         p = [[-x, y, -2], [x, y, -2], [-x, -y, -2], [x, -y, -2],
             [-x, y, z], [x, y, z], [-x, -y, z], [x, -y, z]]
         l = [[0,1], [2,3], [0,2], [1,3],
-            [4,5], [6,7], [4,6], [5,8],
+            [4,5], [6,7], [4,6], [5,7],
             [0, 4], [1, 5], [2, 6], [3, 7]]
+        c = [[1, 1, 1] for i in range(len(l))]
 
         ls = o3d.geometry.LineSet(
             points=o3d.utility.Vector3dVector(p),
             lines=o3d.utility.Vector2iVector(l),
         )
+        ls.colors = o3d.utility.Vector3dVector(c)
 
         scene.add_geometry(ls)
 
         self.scene    = scene
         self.pcd      = pcd
+
 
     #**************** RUN THE SIM **************#
 
@@ -206,7 +219,6 @@ class BallScene:
             
             # save data and label
             elif self.saveData:
-
                 # TODO: based only on left eye rn
                 if np.count_nonzero(self.lEye.searchRay) > self.nRays - 10:
                     skip = True                
@@ -216,8 +228,12 @@ class BallScene:
                     angles.append(curAngles[:2])
 
             if self.seeDistribution:
-                self.lEye.visualizeHits(type='events')
-                self.lEye.visualizeRGB()
+
+                if self.lEye.rgb:
+                    self.lEye.visualizeRGB()
+                else:
+                    self.lEye.visualizeHits(type='events')
+                
                 if self.rEye is not None:
                     self.rEye.visualizeHits(type='events')
 
@@ -260,12 +276,12 @@ def main():
     retinaR[:, 0:1] += 1.0
     retinaR[:, 2:3] += 0.5
 
-    lEye = Eye(pupilL, retinaL, rgb=True, magnitude=True)
+    lEye = Eye(pupilL, retinaL, rgb=True, magnitude=False)
     # rEye = Eye(pupilR, retinaR, rgb=True, magnitude=True)
     rEye = None
     # TODO: make a right eye, figure out how to place them together
 
-    scene = BallScene(lEye, rEye, seeLines=False, seeHits=False, seeDistribution=False, saveData=True)
+    scene = BallScene(lEye, rEye, seeLines=True, seeHits=False, seeDistribution=True, saveData=True)
     scene.setup()
 
     t1 = time.perf_counter()
@@ -287,4 +303,8 @@ if __name__ == "__main__":
     randomize lighting spots?
 
 * headless rendering for speed
+
+* phong lighting (plot/check values to see diff)
+* collect more representative data
+
 """

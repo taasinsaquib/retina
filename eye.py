@@ -86,12 +86,13 @@ class Eye:
         # setup data structs to hold info
         hits      = [0] * self.nRays                 # hit distances of rays, 0 if no intersection
         searchRay = [True] * self.nRays              # store if corresponding ray index has hit yet
-        onv = np.ones((self.nRays, 3))               # store colors of the ray hits, white (1, 1, 1) if not hit 
+        onv = np.zeros((self.nRays, 3))               # store colors of the ray hits, white (1, 1, 1) if not hit 
 
         for t in np.arange(0, 22, 0.1):
 
             pcdPoints = np.asanyarray(pcd.points)
             colors = np.asarray(pcd.colors)
+            normals = np.asarray(pcd.normals)
 
             # extend the rays
             curPoints = self.rays * (1-t) + self.pupil * t
@@ -139,6 +140,8 @@ class Eye:
 
         if (self.rgb == True):
             onv = onv.flatten('F')
+            print("onv\n", onv)
+            print("normals", normals)
         else:
             onv = np.sum(onv * self.greyKernel, axis=1)
 
